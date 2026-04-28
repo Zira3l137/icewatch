@@ -1,0 +1,11 @@
+[package]
+name = "icewatch-persistence"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+toml.workspace = true

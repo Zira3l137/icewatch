@@ -1,0 +1,25 @@
+
+[package]
+name = "icewatch"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+icewatch-utils.path = "../icewatch-utils"
+icewatch-theme.path = "../icewatch-theme"
+icewatch-persistence.path = "../icewatch-persistence"
+icewatch-config.path = "../icewatch-config"
+
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+smol.workspace = true
+
+iced.workspace = true
+serde.workspace = true
+chrono.workspace = true
+rfd.workspace = true
+dirs.workspace = true
+indexmap.workspace = true
+notify.workspace = true

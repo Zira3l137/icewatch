@@ -1,0 +1,6 @@
+theme_icon = "󰸌 "
+locale_icon = " "
+
+sorting_toggle = " Enable automatic sorting "
+overwrite_toggle = " Enable overwrite on duplicates during sorting"
+purge_empty_toggle = "󰛌 Enable empty directory purging"

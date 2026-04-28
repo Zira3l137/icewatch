@@ -1,0 +1,6 @@
+/target
+*.log
+*.ps1
+*.sh
+*.nu
+Cargo.lock

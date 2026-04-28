@@ -1,0 +1,29 @@
+current_theme = "Catppuccin Mocha"
+current_locale = "en-US"
+root_directory = 'C:\Users\Admin\Desktop\Test'
+sorting_enabled = true
+overwrite_existing = true
+watch_status = false
+purge_empty_directories = false
+
+[[sorting_rules]]
+destination = "Docs"
+
+[sorting_rules.criterion.ByExtension]
+extensions = [
+    "pdf",
+    "txt",
+    "pptx",
+    "docx",
+]
+
+[[sorting_rules]]
+destination = "Images"
+
+[sorting_rules.criterion.ByExtension]
+extensions = [
+    "png",
+    "jpg",
+    "webp",
+    "bmp",
+]

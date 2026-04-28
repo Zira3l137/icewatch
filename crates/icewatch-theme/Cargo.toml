@@ -1,0 +1,12 @@
+[package]
+name = "icewatch-theme"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+iced.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+toml.workspace = true
+tracing.workspace = true

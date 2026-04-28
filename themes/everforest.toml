@@ -1,0 +1,7 @@
+name = "Everforest"
+background = "#272E33"
+text = "#7A8478"
+primary = "#7FBBB3"
+success = "#A7C080"
+danger = "#E67E80"
+warning = "#DBBC7F"
