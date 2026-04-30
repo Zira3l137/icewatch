@@ -1,5 +1,5 @@
 use crate::{
-    app::features::{main, rules, settings},
+    app::features::{main, settings},
     macros::{register_features, register_windows},
     rules::Rule,
 };
@@ -70,28 +70,18 @@ pub struct PersistentState {
     pub purge_empty_directories: bool,
 }
 
-register_features!(main::Main, settings::Settings, rules::Rules);
+register_features!(main::Main, settings::Settings);
 
 register_windows!(
     Main {
         settings: WindowSettings {
-            size: Size::new(800.0, 600.0),
+            size: Size::new(860.0, 600.0),
             exit_on_close_request: false,
             ..Default::default()
         },
         view_handler: main::view,
         input_handler: main::input,
         context: main::Context::new
-    },
-    Rules {
-        settings: WindowSettings {
-            size: Size::new(768.0, 512.0),
-            exit_on_close_request: false,
-            ..Default::default()
-        },
-        view_handler: rules::view,
-        input_handler: rules::input,
-        context: rules::Context::new
     },
     Settings {
         settings: WindowSettings {

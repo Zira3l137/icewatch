@@ -1,5 +1,4 @@
 pub mod main;
-pub mod rules;
 pub mod settings;
 
 pub(crate) const SEPARATOR_SIZE: f32 = 2.0;

@@ -2,6 +2,7 @@ mod context_menu;
 mod dashboard;
 mod explorer;
 mod toolbar;
+mod view;
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -10,23 +11,24 @@ use std::{
     time::Duration,
 };
 
-use super::{COL_PADDING, COL_SPACING, CONTAINER_PADDING, DEFAULT_THEME};
+use super::{CONTAINER_PADDING, DEFAULT_THEME};
 use crate::{
     app::{
         App,
         message::{AppMessage, InputEvent, Message as GlobalMessage, SystemMessage},
         state::{FeatureMessage, Window},
     },
-    rules::Rule,
+    rules::{ByExtension, ByName, CriterionKind, Rule},
 };
 
+use anyhow::Context as _;
 use chrono::{DateTime, Local};
 use explorer::ExplorerNode;
 use iced::{
-    Element, Length, Point, Task, Theme,
+    Element, Point, Task, Theme,
     futures::{self, SinkExt},
     keyboard, mouse, stream,
-    widget::{column, combo_box, container, space, stack},
+    widget::combo_box,
     window::Id,
 };
 use icewatch_utils::{command::Command, locale::Locale};
@@ -37,6 +39,23 @@ use notify::{
     recommended_watcher,
 };
 use smol::stream::StreamExt;
+use view::MainView;
+
+#[derive(Debug, Clone, Default)]
+pub(crate) enum Criterion {
+    ByName,
+    #[default]
+    ByExtension,
+}
+
+impl std::fmt::Display for Criterion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Criterion::ByName => write!(f, "By name"),
+            Criterion::ByExtension => write!(f, "By extension"),
+        }
+    }
+}
 
 /// Represents the current IO pipeline stage.
 #[derive(Debug, Clone, Default)]
@@ -59,6 +78,7 @@ pub enum PipelineStage {
 #[derive(Debug, Clone, Default)]
 pub struct State {
     pub(crate) is_loading: bool,
+    current_view: MainView,
     search_requested: bool,
     search_query: String,
     search_results: IndexMap<PathBuf, ExplorerNode>,
@@ -76,11 +96,21 @@ pub struct State {
     mouse_position: Point,
     last_mouse_position: Point,
     last_sorted_file: Option<(PathBuf, PathBuf)>,
+    focused_rule: Option<usize>,
+    sorting_state: combo_box::State<Criterion>,
+    active_criterion: Criterion,
+    extension_input: Option<String>,
+    starts_with_input: Option<String>,
+    ends_with_input: Option<String>,
+    contains_input: Option<String>,
+    destination_input: Option<String>,
+    rule_mode: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct Context<'a> {
     feature_state: &'a State,
+    sorting_rules: &'a Vec<Rule>,
     current_theme: &'a str,
     current_locale: &'a str,
     root_directory: &'a Path,
@@ -94,6 +124,7 @@ pub struct Context<'a> {
 impl<'a> Context<'a> {
     pub fn new(app: &'a App) -> Self {
         Self {
+            sorting_rules: &app.persistent_state.sorting_rules,
             root_directory: app.persistent_state.root_directory.as_path(),
             watch_status: &app.persistent_state.watch_status,
             current_theme: &app.persistent_state.current_theme,
@@ -109,13 +140,13 @@ impl<'a> Context<'a> {
 
 #[derive(Debug)]
 pub struct ContextMut<'a> {
+    sorting_rules: &'a mut Vec<Rule>,
     feature_state: &'a mut State,
     themes: &'a mut HashMap<String, Theme>,
     locales: &'a mut HashMap<String, Locale>,
     root_directory: &'a mut PathBuf,
     watch_status: &'a mut bool,
     overwrite_existing: &'a mut bool,
-    sorting_rules: &'a mut [Rule],
     sorting_enabled: &'a mut bool,
     purge_empty: &'a mut bool,
 }
@@ -149,13 +180,21 @@ pub enum Message {
     IndexingProgress(PathBuf, ExplorerNode),
 
     /// Represents the completion of indexing.
-    IndexingComplete { indexed_date: DateTime<Local>, downloaded_count: usize },
+    IndexingComplete {
+        indexed_date: DateTime<Local>,
+        downloaded_count: usize,
+    },
 
     /// Represents the completion of sorting.
-    SortingComplete { sorted_count: usize, moves: Vec<(PathBuf, PathBuf)> },
+    SortingComplete {
+        sorted_count: usize,
+        moves: Vec<(PathBuf, PathBuf)>,
+    },
 
     /// Represents the completion of purging.
-    PurgeComplete { removed: Vec<PathBuf> },
+    PurgeComplete {
+        removed: Vec<PathBuf>,
+    },
 
     /// Represents a request to run a partial pipeline. (takes a list of paths to index)
     RunPartialPipeline(Vec<PathBuf>),
@@ -213,6 +252,21 @@ pub enum Message {
 
     /// Represents a request to toggle the watch status.
     ToggleWatch,
+
+    OpenJournal,
+    ReturnHome,
+    FocusRule(Option<usize>),
+    RemoveRule(Option<usize>),
+    EditRule(Option<usize>),
+    SetCriterion(Criterion),
+    ApplyRuleEdit(Option<usize>),
+    ExtensionInput(String),
+    StartsWithInput(String),
+    EndsWithInput(String),
+    ContainsInput(String),
+    DestinationInput(String),
+    CancelEdit,
+    AddRule,
 }
 
 impl From<Message> for GlobalMessage {
@@ -227,30 +281,29 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
         Message::AdvancePipeline => match ctx.feature_state.pipeline_queue.pop_front() {
             Some(PipelineStage::IndexFull) => {
                 let root = ctx.root_directory.clone();
-                Task::run(index_directory_stream(root), |msg| msg)
+                return Task::run(index_directory_stream(root), |msg| msg);
             }
             Some(PipelineStage::IndexPaths(paths)) => {
                 let download_count = ctx.feature_state.downloaded_count;
                 let root = ctx.root_directory.clone();
-                Task::run(index_paths_stream(root, paths, download_count), |msg| msg)
+                return Task::run(index_paths_stream(root, paths, download_count), |msg| msg);
             }
             Some(PipelineStage::Sort) => {
                 let registry = ctx.feature_state.root_registry.clone();
                 let root = ctx.root_directory.clone();
                 let rules = ctx.sorting_rules.to_vec();
-                Task::perform(
+                return Task::perform(
                     sort_directory(root, registry, rules, *ctx.overwrite_existing),
                     |msg| msg,
-                )
+                );
             }
             Some(PipelineStage::PurgeEmptyDirs) => {
                 let registry = ctx.feature_state.root_registry.clone();
-                Task::future(purge_empty_dirs(registry))
+                return Task::future(purge_empty_dirs(registry));
             }
             None => {
                 ctx.feature_state.is_loading = false;
                 *ctx.watch_status = ctx.feature_state.watch_status_buffer;
-                Task::none()
             }
         },
         Message::RunPartialPipeline(paths) => {
@@ -269,7 +322,7 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
             }
 
             ctx.feature_state.pipeline_queue = queue;
-            Task::done(Message::AdvancePipeline.into())
+            return Task::done(Message::AdvancePipeline.into());
         }
         Message::RunFullPipeline => {
             ctx.feature_state.watch_status_buffer = ctx.watch_status.clone();
@@ -292,16 +345,15 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
             }
 
             ctx.feature_state.pipeline_queue = queue;
-            Task::done(Message::AdvancePipeline.into())
+            return Task::done(Message::AdvancePipeline.into());
         }
         Message::IndexingProgress(path, node) => {
             Arc::make_mut(&mut ctx.feature_state.root_registry).insert(path, node);
-            Task::none()
         }
         Message::IndexingComplete { indexed_date, downloaded_count } => {
             ctx.feature_state.indexed_date = indexed_date;
             ctx.feature_state.downloaded_count = downloaded_count;
-            Task::done(Message::AdvancePipeline.into())
+            return Task::done(Message::AdvancePipeline.into());
         }
         Message::SortingComplete { sorted_count, moves } => {
             apply_moves(Arc::make_mut(&mut ctx.feature_state.root_registry), &moves);
@@ -316,7 +368,7 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
                     Some((old_path.to_path_buf(), new_path.to_path_buf()));
             }
 
-            Task::done(Message::AdvancePipeline.into())
+            return Task::done(Message::AdvancePipeline.into());
         }
         Message::PurgeComplete { removed } => {
             let registry_mut = Arc::make_mut(&mut ctx.feature_state.root_registry);
@@ -329,7 +381,7 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
                     }
                 }
             }
-            Task::done(Message::AdvancePipeline.into())
+            return Task::done(Message::AdvancePipeline.into());
         }
         Message::RemovePaths(paths) => {
             let registry_mut = Arc::make_mut(&mut ctx.feature_state.root_registry);
@@ -341,7 +393,6 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
                     }
                 }
             }
-            Task::none()
         }
 
         // Controls
@@ -349,11 +400,10 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
             if let Some(dir) = new_root {
                 *ctx.root_directory = dir;
             }
-            Task::done(Message::RunFullPipeline.into())
+            return Task::done(Message::RunFullPipeline.into());
         }
         Message::ToggleWatch => {
             *ctx.watch_status = !*ctx.watch_status;
-            Task::none()
         }
 
         // UI Functionality
@@ -361,11 +411,9 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
             ctx.feature_state.search_query = String::new();
             ctx.feature_state.search_requested = false;
             ctx.feature_state.search_results.clear();
-            Task::none()
         }
         Message::SearchBarInput(i) => {
             ctx.feature_state.search_query = i;
-            Task::none()
         }
         Message::SearchBarSubmit => {
             let term = ctx.feature_state.search_query.to_ascii_lowercase();
@@ -400,10 +448,16 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
             }
 
             ctx.feature_state.search_results = results;
-            Task::none()
         }
-        Message::OpenRules => Task::done(GlobalMessage::App(AppMessage::View(Window::Rules))),
-        Message::OpenSettings => Task::done(GlobalMessage::App(AppMessage::View(Window::Settings))),
+        Message::OpenRules => {
+            ctx.feature_state.current_view = MainView::Rules;
+        }
+        Message::OpenSettings => {
+            return Task::done(GlobalMessage::App(AppMessage::View(Window::Settings)));
+        }
+        Message::OpenJournal => {
+            ctx.feature_state.current_view = MainView::Journal;
+        }
         Message::OpenNode => {
             let cmd = cfg!(target_os = "windows").then(|| "explorer").unwrap_or_else(|| "open");
             if let Some(node) = ctx.feature_state.focused_node.clone() {
@@ -411,7 +465,6 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
                     Command::new(cmd).arg(node.to_string_lossy().into_owned()),
                 )));
             }
-            Task::none()
         }
         Message::ShowNode => {
             if let Some(node) = ctx.feature_state.focused_node.clone() {
@@ -427,23 +480,19 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
                     return Task::done(GlobalMessage::System(SystemMessage::Execute(cmd)));
                 }
             }
-            Task::none()
         }
         Message::ExpandNode(key) => {
             if let Some(node) = Arc::make_mut(&mut ctx.feature_state.root_registry).get_mut(&key) {
                 node.expanded = !node.expanded;
             }
-            Task::none()
         }
         Message::FocusNode(path) => {
             ctx.feature_state.focused_node = Some(path);
-            Task::none()
         }
         Message::ClearFocus => {
             if !ctx.feature_state.context_menu_visible {
                 ctx.feature_state.focused_node = None;
             }
-            Task::none()
         }
         Message::ToggleContextMenu(node_path) => {
             let old_state = ctx.feature_state.context_menu_visible;
@@ -455,7 +504,6 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
             ctx.feature_state.context_menu_visible = !old_state;
             ctx.feature_state.last_mouse_position = ctx.feature_state.mouse_position;
             ctx.feature_state.focused_node = Some(node_path);
-            Task::none()
         }
 
         // Input Handling
@@ -467,14 +515,88 @@ pub(crate) fn update<'a>(msg: Message, ctx: ContextMut<'a>) -> Task<GlobalMessag
                 } else {
                     ctx.feature_state.context_menu_visible = false;
                 }
-                Task::none()
             }
         },
         Message::CaptureMousePosition(pos) => {
             ctx.feature_state.mouse_position = pos;
-            Task::none()
         }
+
+        Message::FocusRule(idx) => {
+            ctx.feature_state.focused_rule = idx;
+        }
+        Message::RemoveRule(Some(idx)) => {
+            ctx.sorting_rules.remove(idx);
+        }
+        Message::SetCriterion(c) => {
+            ctx.feature_state.active_criterion = c;
+        }
+        Message::CancelEdit => {
+            ctx.feature_state.rule_mode = false;
+        }
+        Message::EditRule(Some(idx)) => {
+            if let Some(rule) = ctx.sorting_rules.get(idx) {
+                match &rule.criterion {
+                    CriterionKind::ByExtension(crit) => {
+                        ctx.feature_state.extension_input = Some(crit.extensions.join(", "));
+                        ctx.feature_state.active_criterion = Criterion::ByExtension;
+                    }
+                    CriterionKind::ByName(crit) => {
+                        ctx.feature_state.starts_with_input = crit.starts_with.clone();
+                        ctx.feature_state.ends_with_input = crit.ends_with.clone();
+                        ctx.feature_state.contains_input = crit.contains.clone();
+                        ctx.feature_state.active_criterion = Criterion::ByName;
+                    }
+                }
+                ctx.feature_state.destination_input =
+                    Some(rule.destination.to_string_lossy().into_owned());
+                ctx.feature_state.rule_mode = true;
+            }
+        }
+        Message::DestinationInput(dest) => ctx.feature_state.destination_input = Some(dest),
+        Message::ExtensionInput(ext) => ctx.feature_state.extension_input = Some(ext),
+        Message::StartsWithInput(s) => ctx.feature_state.starts_with_input = Some(s),
+        Message::EndsWithInput(s) => ctx.feature_state.ends_with_input = Some(s),
+        Message::ContainsInput(s) => ctx.feature_state.contains_input = Some(s),
+        Message::ApplyRuleEdit(idx) => {
+            let fs = ctx.feature_state;
+            let rule = match &fs.active_criterion {
+                Criterion::ByExtension => Rule::new(
+                    ByExtension::new(fs.extension_input.clone().unwrap_or_default()),
+                    &fs.destination_input.clone().unwrap_or_default(),
+                ),
+                Criterion::ByName => Rule::new(
+                    ByName {
+                        starts_with: fs.starts_with_input.clone(),
+                        ends_with: fs.ends_with_input.clone(),
+                        contains: fs.contains_input.clone(),
+                    },
+                    &fs.destination_input.clone().unwrap_or_default(),
+                ),
+            }
+            .context("failed to create rule")
+            .unwrap();
+            match idx.and_then(|i| ctx.sorting_rules.get_mut(i)) {
+                Some(existing) => *existing = rule,
+                None => ctx.sorting_rules.push(rule),
+            }
+            fs.rule_mode = false;
+        }
+        Message::ReturnHome => {
+            ctx.feature_state.current_view = MainView::Home;
+        }
+        Message::AddRule => {
+            ctx.feature_state.extension_input = None;
+            ctx.feature_state.starts_with_input = None;
+            ctx.feature_state.ends_with_input = None;
+            ctx.feature_state.contains_input = None;
+            ctx.feature_state.destination_input = None;
+            ctx.feature_state.focused_rule = None;
+            ctx.feature_state.rule_mode = true;
+        }
+        // exhaustive: RemoveRule(None), EditRule(None) are no-ops
+        _ => {}
     }
+    Task::none()
 }
 
 pub(crate) fn view<'a>(ctx: Context<'a>, _window_id: Id) -> Element<'a, GlobalMessage> {
@@ -488,22 +610,7 @@ pub(crate) fn view<'a>(ctx: Context<'a>, _window_id: Id) -> Element<'a, GlobalMe
 
     let locale = ctx.locales.get(current_locale).expect("locale not found");
 
-    let toolbar = toolbar::toolbar(&locale, ctx.clone());
-    let dashboard = dashboard::dashboard(ctx.clone(), &locale, &theme);
-    let explorer = explorer::explorer(ctx.clone(), &locale, &theme);
-    let context_menu = if ctx.feature_state.context_menu_visible {
-        context_menu::context_menu(ctx.clone(), &locale)
-    } else {
-        space().into()
-    };
-
-    let content =
-        container(column![toolbar, dashboard, explorer].spacing(COL_SPACING).padding(COL_PADDING))
-            .align_top(Length::Fill)
-            .padding(CONTAINER_PADDING)
-            .into();
-
-    stack([content, context_menu]).into()
+    ctx.feature_state.current_view.view(ctx.clone(), &locale, &theme)
 }
 
 pub(crate) fn input(input: &InputEvent) -> Task<GlobalMessage> {
