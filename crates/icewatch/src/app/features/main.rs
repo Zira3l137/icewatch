@@ -2,35 +2,45 @@ mod context_menu;
 mod dashboard;
 mod data;
 mod explorer;
-mod main_message;
+mod message;
 mod toolbar;
 mod view;
 
-use std::{
-    collections::{HashMap, VecDeque},
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
-use super::{CONTAINER_PADDING, DEFAULT_THEME};
-use crate::{
-    app::{
-        App,
-        message::{InputEvent, Message as GlobalMessage},
-        state::FeatureMessage,
-    },
-    rules::{CriterionKind, Rule},
-};
-
-use chrono::{DateTime, Local};
-use data::{Criterion, PipelineStage};
+use chrono::DateTime;
+use chrono::Local;
+use data::Criterion;
+use data::PipelineStage;
 use explorer::ExplorerNode;
-use iced::{Element, Point, Task, Theme, keyboard, mouse, widget::combo_box, window};
+use iced::Element;
+use iced::Point;
+use iced::Task;
+use iced::Theme;
+use iced::keyboard;
+use iced::mouse;
+use iced::widget::combo_box;
+use iced::window;
 use icewatch_utils::locale::Locale;
 use indexmap::IndexMap;
-pub(crate) use main_message::{HomeMessage, JournalMessage, RulesMessage, watch_directory_stream};
+pub(crate) use message::HomeMessage;
+pub(crate) use message::JournalMessage;
+pub(crate) use message::RulesMessage;
+pub(crate) use message::watch_directory_stream;
 use view::MainView;
+
+use crate::app::App;
+use crate::app::features::DEFAULT_THEME;
+use crate::app::message::InputEvent;
+use crate::app::message::Message as GlobalMessage;
+use crate::app::state::FeatureMessage;
+use crate::rules::CriterionKind;
+use crate::rules::Rule;
 
 #[derive(Debug, Clone, Default)]
 pub struct State {

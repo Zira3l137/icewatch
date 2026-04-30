@@ -1,18 +1,25 @@
-use crate::app::features::{PROGRESS_FRAME_COUNT, PROGRESS_INTERVAL_MS};
-
-use super::{
-    super::{CONTAINER_PADDING, ICON_SIZE, ROW_PADDING, ROW_SPACING, SEPARATOR_SIZE},
-    Context, GlobalMessage,
-};
-
-use iced::{
-    Element, Length, Theme,
-    widget::{
-        column, container, rich_text, row, rule, space,
-        text::{Span, Text},
-    },
-};
+use iced::Element;
+use iced::Length;
+use iced::Theme;
+use iced::widget::column;
+use iced::widget::container;
+use iced::widget::rich_text;
+use iced::widget::row;
+use iced::widget::rule;
+use iced::widget::space;
+use iced::widget::text::Span;
+use iced::widget::text::Text;
 use icewatch_utils::locale::Locale;
+
+use crate::app::features::CONTAINER_PADDING;
+use crate::app::features::ICON_SIZE;
+use crate::app::features::PROGRESS_FRAME_COUNT;
+use crate::app::features::PROGRESS_INTERVAL_MS;
+use crate::app::features::ROW_PADDING;
+use crate::app::features::ROW_SPACING;
+use crate::app::features::SEPARATOR_SIZE;
+use crate::app::features::main::Context;
+use crate::app::features::main::GlobalMessage;
 
 pub(crate) fn dashboard<'a>(
     ctx: Context<'a>,

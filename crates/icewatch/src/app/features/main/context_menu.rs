@@ -1,12 +1,15 @@
-use crate::app::features::main::main_message::HomeMessage;
-
-use super::{CONTAINER_PADDING, Context, GlobalMessage};
-
-use iced::{
-    Element, Vector,
-    widget::{button, column, container, float},
-};
+use iced::Element;
+use iced::Vector;
+use iced::widget::button;
+use iced::widget::column;
+use iced::widget::container;
+use iced::widget::float;
 use icewatch_utils::locale::Locale;
+
+use crate::app::features::CONTAINER_PADDING;
+use crate::app::features::main::Context;
+use crate::app::features::main::GlobalMessage;
+use crate::app::features::main::message::HomeMessage;
 
 pub(crate) fn context_menu<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);

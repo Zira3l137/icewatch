@@ -1,13 +1,16 @@
-use std::{
-    fs::File,
-    io::Write,
-    path::Path,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 use anyhow::Result;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 static CURRENT_LOG_LEVEL: OnceLock<LevelFilter> = OnceLock::new();
 

@@ -1,23 +1,35 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::app::features::TOOLTIP_DELAY_MS;
-
-use super::super::{CONTAINER_PADDING, ICON_SIZE, SCROLLBAR_SPACING};
-use super::{Context, GlobalMessage, HomeMessage};
-
-use chrono::{DateTime, Local};
+use chrono::DateTime;
+use chrono::Local;
+use iced::Background;
+use iced::Color;
+use iced::Element;
+use iced::Length;
+use iced::Theme;
+use iced::alignment::Vertical;
+use iced::theme::palette::Extended;
+use iced::widget::button;
+use iced::widget::column;
+use iced::widget::container;
+use iced::widget::mouse_area;
+use iced::widget::rich_text;
+use iced::widget::row;
+use iced::widget::scrollable;
+use iced::widget::space;
+use iced::widget::text;
+use iced::widget::text::Span;
 use iced::widget::tooltip;
-use iced::{Background, Color};
-use iced::{
-    Element, Length, Theme,
-    alignment::Vertical,
-    theme::palette::Extended,
-    widget::{
-        button, column, container, mouse_area, rich_text, row, scrollable, space, text, text::Span,
-    },
-};
 use icewatch_utils::locale::Locale;
+
+use crate::app::features::CONTAINER_PADDING;
+use crate::app::features::ICON_SIZE;
+use crate::app::features::SCROLLBAR_SPACING;
+use crate::app::features::TOOLTIP_DELAY_MS;
+use crate::app::features::main::Context;
+use crate::app::features::main::GlobalMessage;
+use crate::app::features::main::HomeMessage;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExplorerNode {

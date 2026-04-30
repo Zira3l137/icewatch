@@ -1,10 +1,11 @@
-use std::{
-    fs::{create_dir_all, read_to_string, write},
-    path::Path,
-    result::Result as StdResult,
-};
+use std::fs::create_dir_all;
+use std::fs::read_to_string;
+use std::fs::write;
+use std::path::Path;
+use std::result::Result as StdResult;
 
-use anyhow::{Context, Result};
+use anyhow::Context;
+use anyhow::Result;
 
 pub trait Persistent {
     type State: serde::Serialize + serde::de::DeserializeOwned;

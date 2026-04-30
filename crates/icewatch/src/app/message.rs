@@ -1,9 +1,12 @@
 use std::time::Instant;
 
-use crate::app::state::{FeatureMessage, Window};
+use iced::keyboard::Event as KeyboardEvent;
+use iced::mouse::Event as MouseEvent;
+use iced::window::Id;
 use icewatch_utils::command::Command;
 
-use iced::{keyboard::Event as KeyboardEvent, mouse::Event as MouseEvent, window::Id};
+use crate::app::state::FeatureMessage;
+use crate::app::state::Window;
 
 #[derive(Debug, Clone)]
 pub enum Message {

@@ -1,6 +1,8 @@
-use std::{borrow::Cow, path::Path};
+use std::borrow::Cow;
+use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Context;
+use anyhow::Result;
 
 pub fn read_fonts<P: AsRef<Path>>(path: P) -> Result<Vec<Cow<'static, [u8]>>> {
     let path = path.as_ref();

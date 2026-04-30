@@ -4,13 +4,21 @@ mod app;
 mod macros;
 mod rules;
 
-use std::{path::Path, sync::LazyLock};
+use std::path::Path;
+use std::sync::LazyLock;
 
+use anyhow::Context;
+use anyhow::Result;
+use anyhow::anyhow;
+use iced::Font;
+use iced::Settings;
+use iced::daemon;
+use iced::window::icon;
 use icewatch_config::read_settings;
-use icewatch_utils::{cli, io::read_fonts, locale::read_available_locales, logging};
-
-use anyhow::{Context, Result, anyhow};
-use iced::{Font, Settings, daemon, window::icon};
+use icewatch_utils::cli;
+use icewatch_utils::io::read_fonts;
+use icewatch_utils::locale::read_available_locales;
+use icewatch_utils::logging;
 use logging::setup_logger;
 
 use crate::app::App;

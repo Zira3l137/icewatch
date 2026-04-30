@@ -1,7 +1,10 @@
-use anyhow::{Context, Result};
-use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 
-use std::{collections::HashMap, fs, path::Path};
+use anyhow::Context;
+use anyhow::Result;
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Locale {

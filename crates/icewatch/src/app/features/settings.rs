@@ -1,18 +1,29 @@
-use super::{CONTAINER_PADDING, DEFAULT_THEME, ICON_SIZE, ROW_PADDING, ROW_SPACING};
 use std::collections::HashMap;
 
-use crate::app::{
-    App,
-    message::{InputEvent, Message as GlobalMessage},
-    state::FeatureMessage,
-};
-
-use iced::{
-    Element, Length, Task, Theme, keyboard, mouse,
-    widget::{column, combo_box, container, row, text, toggler},
-    window::Id,
-};
+use iced::Element;
+use iced::Length;
+use iced::Task;
+use iced::Theme;
+use iced::keyboard;
+use iced::mouse;
+use iced::widget::column;
+use iced::widget::combo_box;
+use iced::widget::container;
+use iced::widget::row;
+use iced::widget::text;
+use iced::widget::toggler;
+use iced::window::Id;
 use icewatch_utils::locale::Locale;
+
+use super::CONTAINER_PADDING;
+use super::DEFAULT_THEME;
+use super::ICON_SIZE;
+use super::ROW_PADDING;
+use super::ROW_SPACING;
+use crate::app::App;
+use crate::app::message::InputEvent;
+use crate::app::message::Message as GlobalMessage;
+use crate::app::state::FeatureMessage;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct State {

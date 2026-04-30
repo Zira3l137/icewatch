@@ -1,17 +1,20 @@
-use crate::app::features::main::main_message::HomeMessage;
-
-use super::Context;
-
-use super::super::{CONTAINER_PADDING, ROW_PADDING, ROW_SPACING};
-use super::GlobalMessage;
-
+use iced::Element;
+use iced::Length;
+use iced::alignment::Vertical;
+use iced::widget::button;
+use iced::widget::column;
+use iced::widget::container;
+use iced::widget::row;
+use iced::widget::space;
 use iced::widget::text_input;
-use iced::{
-    Element, Length,
-    alignment::Vertical,
-    widget::{button, column, container, row, space},
-};
 use icewatch_utils::locale::Locale;
+
+use crate::app::features::CONTAINER_PADDING;
+use crate::app::features::ROW_PADDING;
+use crate::app::features::ROW_SPACING;
+use crate::app::features::main::Context;
+use crate::app::features::main::GlobalMessage;
+use crate::app::features::main::message::HomeMessage;
 
 pub(crate) fn toolbar<'a>(locale: &'a Locale, ctx: Context<'a>) -> Element<'a, GlobalMessage> {
     let controls_panel = controls_panel(ctx.clone(), locale);

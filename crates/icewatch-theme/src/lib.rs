@@ -1,13 +1,17 @@
 mod macros;
 
-use anyhow::{Context, Result};
-use iced::{
-    Color, Theme,
-    theme::{Base, Palette},
-};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+
+use anyhow::Context;
+use anyhow::Result;
+use iced::Color;
+use iced::Theme;
+use iced::theme::Base;
+use iced::theme::Palette;
 use macros::register_themes;
 use serde::Deserialize;
-use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserTheme {

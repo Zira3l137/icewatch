@@ -97,4 +97,5 @@ macro_rules! register_windows {
     };
 }
 
-pub(crate) use {register_features, register_windows};
+pub(crate) use register_features;
+pub(crate) use register_windows;

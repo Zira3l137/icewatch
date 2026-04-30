@@ -1,7 +1,10 @@
-use std::{fs::read_to_string, path::Path};
+use std::fs::read_to_string;
+use std::path::Path;
 
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::Context;
+use anyhow::Result;
+use serde::Deserialize;
+use serde::Serialize;
 use toml::from_str;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

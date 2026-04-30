@@ -1,33 +1,37 @@
-use chrono::{DateTime, Local};
-use iced::{
-    Point, Task,
-    futures::{self, SinkExt},
-    mouse, stream,
-};
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use chrono::DateTime;
+use chrono::Local;
+use iced::Point;
+use iced::Task;
+use iced::futures;
+use iced::futures::SinkExt;
+use iced::mouse;
+use iced::stream;
 use icewatch_utils::command::Command;
 use indexmap::IndexMap;
-use std::{
-    collections::{HashSet, VecDeque},
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-
-use super::super::{
-    ContextMut, Message, data::PipelineStage, explorer::ExplorerNode, view::MainView,
-};
-use crate::{
-    app::{
-        Window,
-        message::{AppMessage, Message as GlobalMessage, SystemMessage},
-    },
-    rules::Rule,
-};
-use notify::{
-    EventKind, RecursiveMode, Watcher,
-    event::{ModifyKind, RenameMode},
-    recommended_watcher,
-};
+use notify::EventKind;
+use notify::RecursiveMode;
+use notify::Watcher;
+use notify::event::ModifyKind;
+use notify::event::RenameMode;
+use notify::recommended_watcher;
 use smol::stream::StreamExt;
+
+use crate::app::Window;
+use crate::app::features::main::ContextMut;
+use crate::app::features::main::Message;
+use crate::app::features::main::data::PipelineStage;
+use crate::app::features::main::explorer::ExplorerNode;
+use crate::app::features::main::view::MainView;
+use crate::app::message::AppMessage;
+use crate::app::message::Message as GlobalMessage;
+use crate::app::message::SystemMessage;
+use crate::rules::Rule;
 
 /// Represents a message from the home view.
 #[derive(Debug, Clone)]

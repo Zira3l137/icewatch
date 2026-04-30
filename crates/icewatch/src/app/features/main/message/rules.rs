@@ -1,10 +1,14 @@
-use super::super::{ContextMut, Message, data::Criterion};
-use crate::{
-    app::message::Message as GlobalMessage,
-    rules::{ByExtension, ByName, CriterionKind, Rule},
-};
 use anyhow::Context as _;
 use iced::Task;
+
+use super::super::ContextMut;
+use super::super::Message;
+use super::super::data::Criterion;
+use crate::app::message::Message as GlobalMessage;
+use crate::rules::ByExtension;
+use crate::rules::ByName;
+use crate::rules::CriterionKind;
+use crate::rules::Rule;
 
 /// Represents a message from the rules view.
 #[derive(Debug, Clone)]

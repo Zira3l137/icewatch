@@ -1,5 +1,8 @@
-use anyhow::{Result, anyhow};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
+
+use anyhow::Result;
+use anyhow::anyhow;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Rule {

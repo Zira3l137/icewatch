@@ -1,21 +1,23 @@
-use crate::{
-    app::features::{main, settings},
-    macros::{register_features, register_windows},
-    rules::Rule,
-};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::Duration;
+use std::time::Instant;
 
-use chrono::{DateTime, Local};
-use iced::{
-    Size, Theme,
-    window::{Icon, Id, Settings as WindowSettings},
-};
+use chrono::DateTime;
+use chrono::Local;
+use iced::Size;
+use iced::Theme;
+use iced::window::Icon;
+use iced::window::Id;
+use iced::window::Settings as WindowSettings;
 use icewatch_theme::load_available_themes;
 use icewatch_utils::locale::Locale;
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+
+use crate::app::features::main;
+use crate::app::features::settings;
+use crate::macros::register_features;
+use crate::macros::register_windows;
+use crate::rules::Rule;
 
 const THEMES_PATH: &str = "themes";
 

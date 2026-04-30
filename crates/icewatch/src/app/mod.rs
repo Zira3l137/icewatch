@@ -2,19 +2,31 @@ mod features;
 mod message;
 mod state;
 
-use icewatch_persistence::Persistent;
-use icewatch_utils::locale::{Locale, get_system_locale};
-
-use crate::app::{features::main, message::InputEvent};
-
-use message::{AppMessage, Message, SystemMessage};
-use state::{
-    AppState, FeaturesState, PersistentState, Window, initialize_features, route_feature_update,
-};
-
 use std::collections::HashMap;
 
-use iced::{Element, Subscription, Task, Theme, event, theme::Style, widget::space, window};
+use iced::Element;
+use iced::Subscription;
+use iced::Task;
+use iced::Theme;
+use iced::event;
+use iced::theme::Style;
+use iced::widget::space;
+use iced::window;
+use icewatch_persistence::Persistent;
+use icewatch_utils::locale::Locale;
+use icewatch_utils::locale::get_system_locale;
+use message::AppMessage;
+use message::Message;
+use message::SystemMessage;
+use state::AppState;
+use state::FeaturesState;
+use state::PersistentState;
+use state::Window;
+use state::initialize_features;
+use state::route_feature_update;
+
+use crate::app::features::main;
+use crate::app::message::InputEvent;
 
 pub(crate) const STATE_PATH: &str = "state.toml";
 

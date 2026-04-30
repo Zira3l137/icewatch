@@ -1,21 +1,39 @@
-use crate::{
-    app::{features::main::RulesMessage, message::Message as GlobalMessage},
-    rules::Rule,
-};
-use iced::{
-    Color, Element, Length, Theme, mouse,
-    theme::palette::Extended,
-    widget::{
-        button, column, combo_box, container, mouse_area, rich_text, row, space, stack, text,
-        text::Span, text_input,
-    },
-};
+use iced::Color;
+use iced::Element;
+use iced::Length;
+use iced::Theme;
+use iced::mouse;
+use iced::theme::palette::Extended;
+use iced::widget::button;
+use iced::widget::column;
+use iced::widget::combo_box;
+use iced::widget::container;
+use iced::widget::mouse_area;
+use iced::widget::rich_text;
+use iced::widget::row;
+use iced::widget::space;
+use iced::widget::stack;
+use iced::widget::text;
+use iced::widget::text::Span;
+use iced::widget::text_input;
 use icewatch_utils::locale::Locale;
 
-use super::{
-    super::{COL_PADDING, COL_SPACING, CONTAINER_PADDING, ROW_PADDING, ROW_SPACING},
-    Context, Criterion, CriterionKind, Message, context_menu, dashboard, explorer, toolbar,
-};
+use crate::app::features::COL_PADDING;
+use crate::app::features::COL_SPACING;
+use crate::app::features::CONTAINER_PADDING;
+use crate::app::features::ROW_PADDING;
+use crate::app::features::ROW_SPACING;
+use crate::app::features::main::Context;
+use crate::app::features::main::Criterion;
+use crate::app::features::main::CriterionKind;
+use crate::app::features::main::Message;
+use crate::app::features::main::RulesMessage;
+use crate::app::features::main::context_menu;
+use crate::app::features::main::dashboard;
+use crate::app::features::main::explorer;
+use crate::app::features::main::toolbar;
+use crate::app::message::Message as GlobalMessage;
+use crate::rules::Rule;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) enum MainView {
