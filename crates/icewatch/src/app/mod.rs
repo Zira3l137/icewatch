@@ -5,7 +5,7 @@ mod state;
 use icewatch_persistence::Persistent;
 use icewatch_utils::locale::{Locale, get_system_locale};
 
-use crate::app::{features::main, message::InputEvent, state::FeatureMessage};
+use crate::app::{features::main, message::InputEvent};
 
 use message::{AppMessage, Message, SystemMessage};
 use state::{
@@ -48,9 +48,8 @@ impl App {
         initialize_features(&mut app);
         (
             app,
-            Task::done(Message::App(AppMessage::View(Window::Main))).chain(Task::done(
-                Message::Feature(FeatureMessage::Main(main::Message::RunFullPipeline)),
-            )),
+            Task::done(Message::App(AppMessage::View(Window::Main)))
+                .chain(Task::done(main::HomeMessage::RunFullPipeline.into())),
         )
     }
 

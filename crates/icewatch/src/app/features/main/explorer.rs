@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::app::features::TOOLTIP_DELAY_MS;
 
 use super::super::{CONTAINER_PADDING, ICON_SIZE, SCROLLBAR_SPACING};
-use super::{Context, GlobalMessage, Message};
+use super::{Context, GlobalMessage, HomeMessage};
 
 use chrono::{DateTime, Local};
 use iced::widget::tooltip;
@@ -59,7 +59,7 @@ pub(crate) fn explorer<'a>(
     let node_col = nodes.into_iter().fold(column![], |acc, node| acc.push(node));
 
     scrollable(
-        container(mouse_area(node_col).on_exit(Message::ClearFocus.into()))
+        container(mouse_area(node_col).on_exit(HomeMessage::ClearFocus.into()))
             .height(Length::Shrink)
             .width(Length::Fill)
             .align_y(Vertical::Top)
@@ -140,8 +140,8 @@ fn node_button<'a>(
         ])
         .align_y(Vertical::Center),
     )
-    .on_right_release(Message::ToggleContextMenu(node.path.clone()).into())
-    .on_enter(Message::FocusNode(node.path.clone()).into())
+    .on_right_release(HomeMessage::ToggleContextMenu(node.path.clone()).into())
+    .on_enter(HomeMessage::FocusNode(node.path.clone()).into())
     .into()
 }
 
@@ -184,7 +184,7 @@ fn node_label_button<'a>(
             .into();
 
     button(container(text_row).style(container_style).padding(2.0))
-        .on_press(Message::ExpandNode(node.path.clone()).into())
+        .on_press(HomeMessage::ExpandNode(node.path.clone()).into())
         .width(Length::Fill)
         .style(button::text)
         .into()

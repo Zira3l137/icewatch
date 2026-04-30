@@ -1,4 +1,6 @@
-use super::{CONTAINER_PADDING, Context, GlobalMessage, Message};
+use crate::app::features::main::main_message::HomeMessage;
+
+use super::{CONTAINER_PADDING, Context, GlobalMessage};
 
 use iced::{
     Element, Vector,
@@ -9,8 +11,10 @@ use icewatch_utils::locale::Locale;
 pub(crate) fn context_menu<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
     let btn_style = button::text;
-    let open_btn = button(local("open_btn")).on_press(Message::OpenNode.into()).style(btn_style);
-    let show_btn = button(local("show_btn")).on_press(Message::ShowNode.into()).style(btn_style);
+    let open_btn =
+        button(local("open_btn")).on_press(HomeMessage::OpenNode.into()).style(btn_style);
+    let show_btn =
+        button(local("show_btn")).on_press(HomeMessage::ShowNode.into()).style(btn_style);
 
     float(
         container(column![open_btn, show_btn])

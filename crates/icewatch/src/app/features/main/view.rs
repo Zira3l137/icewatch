@@ -1,4 +1,7 @@
-use crate::{app::message::Message as GlobalMessage, rules::Rule};
+use crate::{
+    app::{features::main::RulesMessage, message::Message as GlobalMessage},
+    rules::Rule,
+};
 use iced::{
     Color, Element, Length, Theme, mouse,
     theme::palette::Extended,
@@ -83,7 +86,7 @@ fn return_panel<'a>(locale: &'a Locale) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
     let return_btn = button(text(local("return_btn")).center())
         .width(Length::Fill)
-        .on_press(Message::ReturnHome.into());
+        .on_press(Message::Return.into());
     row![return_btn].spacing(ROW_SPACING).padding(ROW_PADDING).into()
 }
 
@@ -107,15 +110,15 @@ fn control_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, Global
         row![
             button(text(local("add_rule_btn")).center())
                 .style(button::success)
-                .on_press(Message::AddRule.into())
+                .on_press(RulesMessage::AddRule.into())
                 .width(Length::Fill),
             button(text(local("edit_rule_btn")).center())
                 .style(button::warning)
-                .on_press(Message::EditRule(ctx.feature_state.focused_rule).into())
+                .on_press(RulesMessage::EditRule(ctx.feature_state.focused_rule).into())
                 .width(Length::Fill),
             button(text(local("remove_rule_btn")).center())
                 .style(button::danger)
-                .on_press(Message::RemoveRule(ctx.feature_state.focused_rule).into())
+                .on_press(RulesMessage::RemoveRule(ctx.feature_state.focused_rule).into())
                 .width(Length::Fill),
         ]
         .spacing(COL_SPACING)
@@ -137,22 +140,22 @@ fn edit_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMes
         &fs.sorting_state,
         local("sorting_placeholder"),
         Some(&fs.active_criterion),
-        |s| Message::SetCriterion(s).into(),
+        |s| RulesMessage::SetCriterion(s).into(),
     );
 
     let input_section: Element<'a, GlobalMessage> = match &fs.active_criterion {
         Criterion::ByExtension => {
             text_input(local("extension"), &fs.extension_input.clone().unwrap_or_default())
-                .on_input(|i| Message::ExtensionInput(i).into())
+                .on_input(|i| RulesMessage::ExtensionInput(i).into())
                 .into()
         }
         Criterion::ByName => column![
             text_input(local("starts_with"), &fs.starts_with_input.clone().unwrap_or_default())
-                .on_input(|i| Message::StartsWithInput(i).into()),
+                .on_input(|i| RulesMessage::StartsWithInput(i).into()),
             text_input(local("ends_with"), &fs.ends_with_input.clone().unwrap_or_default())
-                .on_input(|i| Message::EndsWithInput(i).into()),
+                .on_input(|i| RulesMessage::EndsWithInput(i).into()),
             text_input(local("contains"), &fs.contains_input.clone().unwrap_or_default())
-                .on_input(|i| Message::ContainsInput(i).into()),
+                .on_input(|i| RulesMessage::ContainsInput(i).into()),
         ]
         .padding(COL_PADDING)
         .spacing(COL_SPACING)
@@ -161,17 +164,17 @@ fn edit_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMes
 
     let destination_input =
         text_input(local("destination"), &fs.destination_input.clone().unwrap_or_default())
-            .on_input(|i| Message::DestinationInput(i).into());
+            .on_input(|i| RulesMessage::DestinationInput(i).into());
 
     let controls = row![
         button(text(local("apply_btn")))
             .width(Length::Fill)
             .style(button::success)
-            .on_press(Message::ApplyRuleEdit(fs.focused_rule).into()),
+            .on_press(RulesMessage::ApplyRuleEdit(fs.focused_rule).into()),
         button(text(local("cancel_btn")))
             .width(Length::Fill)
             .style(button::danger)
-            .on_press(Message::CancelEdit.into()),
+            .on_press(RulesMessage::CancelEdit.into()),
     ]
     .padding(ROW_PADDING)
     .spacing(ROW_SPACING);
@@ -216,7 +219,7 @@ fn list_box<'a>(
                     .style(move |theme| container::bordered_box(theme).background(bg)),
             )
             .interaction(interaction)
-            .on_press(Message::FocusRule(rule_idx).into())
+            .on_press(RulesMessage::FocusRule(rule_idx).into())
             .into()
         })
         .collect();
