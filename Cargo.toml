@@ -35,7 +35,10 @@ iced = { version = "0.14.0", default-features = false, features = [
     "image",
 ] }
 smol = { version = "2.0.2", default-features = false }
-chrono = { version = "0.4.44", default-features = false, features = ["std"] }
+chrono = { version = "0.4.44", default-features = false, features = [
+    "std",
+    "serde",
+] }
 rfd = { version = "0.17.2", default-features = true }
 dirs = { version = "6.0.0", default-features = true }
 indexmap = { version = "2.14.0", default-features = false, features = [

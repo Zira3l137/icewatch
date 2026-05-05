@@ -39,6 +39,8 @@ use crate::app::features::DEFAULT_THEME;
 use crate::app::message::InputEvent;
 use crate::app::message::Message as GlobalMessage;
 use crate::app::state::FeatureMessage;
+use crate::journal::ActionType;
+use crate::journal::Journal;
 use crate::rules::CriterionKind;
 use crate::rules::Rule;
 
@@ -84,6 +86,7 @@ pub struct Context<'a> {
     date: &'a DateTime<Local>,
     last_redraw: &'a Duration,
     watch_status: &'a bool,
+    journal: &'a Journal,
 }
 
 impl<'a> Context<'a> {
@@ -99,6 +102,7 @@ impl<'a> Context<'a> {
             last_redraw: &app.app_state.last_redraw,
             themes: &app.app_state.themes,
             locales: &app.app_state.locales,
+            journal: &app.persistent_state.journal,
         }
     }
 }
@@ -112,6 +116,7 @@ pub struct ContextMut<'a> {
     overwrite_existing: &'a mut bool,
     sorting_enabled: &'a mut bool,
     purge_empty: &'a mut bool,
+    journal: &'a mut Journal,
 }
 
 impl<'a> ContextMut<'a> {
@@ -124,6 +129,7 @@ impl<'a> ContextMut<'a> {
             sorting_rules: &mut app.persistent_state.sorting_rules,
             sorting_enabled: &mut app.persistent_state.sorting_enabled,
             purge_empty: &mut app.persistent_state.purge_empty_directories,
+            journal: &mut app.persistent_state.journal,
         }
     }
 }
@@ -134,6 +140,7 @@ pub fn init(_ctx: ContextMut<'_>) {}
 pub enum Message {
     Home(HomeMessage),
     Rules(RulesMessage),
+    #[expect(dead_code)]
     Journal(JournalMessage),
     Return,
 }

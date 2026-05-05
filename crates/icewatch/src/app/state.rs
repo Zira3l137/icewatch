@@ -15,6 +15,7 @@ use icewatch_utils::locale::Locale;
 
 use crate::app::features::main;
 use crate::app::features::settings;
+use crate::journal::Journal;
 use crate::macros::register_features;
 use crate::macros::register_windows;
 use crate::rules::Rule;
@@ -66,6 +67,7 @@ pub struct PersistentState {
     pub current_locale: String,
     pub sorting_rules: Vec<Rule>,
     pub root_directory: PathBuf,
+    pub journal: Journal,
     pub sorting_enabled: bool,
     pub overwrite_existing: bool,
     pub watch_status: bool,

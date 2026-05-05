@@ -31,6 +31,8 @@ use crate::app::features::main::view::MainView;
 use crate::app::message::AppMessage;
 use crate::app::message::Message as GlobalMessage;
 use crate::app::message::SystemMessage;
+use crate::journal::Action;
+use crate::journal::ActionType;
 use crate::rules::Rule;
 
 /// Represents a message from the home view.

@@ -37,3 +37,10 @@ pub enum PipelineStage {
     /// replaces them in the filesystem to represent the sorted order.
     Sort,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum JournalEntrySection {
+    Today,
+    Yesterday,
+    All,
+}

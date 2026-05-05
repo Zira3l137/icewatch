@@ -27,6 +27,7 @@ use state::route_feature_update;
 
 use crate::app::features::main;
 use crate::app::message::InputEvent;
+use crate::journal::ActionType;
 
 pub(crate) const STATE_PATH: &str = "state.toml";
 

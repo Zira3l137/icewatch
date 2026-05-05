@@ -15,6 +15,7 @@ use crate::app::features::ROW_SPACING;
 use crate::app::features::main::Context;
 use crate::app::features::main::GlobalMessage;
 use crate::app::features::main::message::HomeMessage;
+use crate::journal::ActionType;
 
 pub(crate) fn toolbar<'a>(locale: &'a Locale, ctx: Context<'a>) -> Element<'a, GlobalMessage> {
     let controls_panel = controls_panel(ctx.clone(), locale);
