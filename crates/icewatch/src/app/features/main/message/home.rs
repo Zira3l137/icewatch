@@ -44,17 +44,23 @@ pub(crate) enum HomeMessage {
     /// Represents the completion of indexing.
     IndexingComplete { indexed_date: DateTime<Local>, downloaded_count: usize },
 
+    /// Represents the progress of sorting. Contains a pair of path buffers representing the old and new paths of a file being moved.
+    SortingProgress((PathBuf, PathBuf)),
+
     /// Represents the completion of sorting.
-    SortingComplete { sorted_count: usize, moves: Vec<(PathBuf, PathBuf)> },
+    SortingComplete,
+
+    /// Represents the progress of purging.
+    PurgeProgress(PathBuf),
 
     /// Represents the completion of purging.
-    PurgeComplete { removed: Vec<PathBuf> },
+    PurgeComplete,
 
     /// Represents a request to run a partial pipeline. (takes a list of paths to index)
     RunPartialPipeline(Vec<PathBuf>),
 
     /// Represents a request to run the full pipeline. (indexing all files in the root recursively)
-    RunFullPipeline,
+    RunFullPipeline(ActionType),
 
     /// Represents a request to advance the pipeline.
     AdvancePipeline,
@@ -129,22 +135,21 @@ impl HomeMessage {
                 Some(PipelineStage::IndexPaths(paths)) => {
                     let download_count = ctx.feature_state.downloaded_count;
                     let root = ctx.root_directory.clone();
-                    return Task::run(index_paths_stream(root, paths, download_count), |msg| msg);
+                    return Task::stream(index_paths_stream(root, paths, download_count));
                 }
                 Some(PipelineStage::Sort) => {
                     let registry = ctx.feature_state.root_registry.clone();
                     let root = ctx.root_directory.clone();
                     let rules = ctx.sorting_rules.to_vec();
-                    return Task::perform(
-                        sort_directory(root, registry, rules, *ctx.overwrite_existing),
-                        |msg| msg,
-                    );
+                    let overwrite = *ctx.overwrite_existing;
+                    return Task::stream(sort_directory(root, registry, rules, overwrite));
                 }
                 Some(PipelineStage::PurgeEmptyDirs) => {
                     let registry = ctx.feature_state.root_registry.clone();
-                    return Task::future(purge_empty_dirs(registry));
+                    return Task::stream(purge_empty_dirs(registry));
                 }
                 None => {
+                    ctx.feature_state.current_action_type = None;
                     ctx.feature_state.is_loading = false;
                     *ctx.watch_status = ctx.feature_state.watch_status_buffer;
                 }
@@ -167,7 +172,9 @@ impl HomeMessage {
                 ctx.feature_state.pipeline_queue = queue;
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
-            HomeMessage::RunFullPipeline => {
+            HomeMessage::RunFullPipeline(action_type) => {
+                ctx.feature_state.current_action_type = Some(action_type);
+
                 ctx.feature_state.watch_status_buffer = ctx.watch_status.clone();
                 *ctx.watch_status = false;
 
@@ -198,10 +205,20 @@ impl HomeMessage {
                 ctx.feature_state.downloaded_count = downloaded_count;
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
-            HomeMessage::SortingComplete { sorted_count, moves } => {
-                apply_moves(Arc::make_mut(&mut ctx.feature_state.root_registry), &moves);
-                ctx.feature_state.sorted_count += sorted_count;
+            HomeMessage::SortingProgress(move_pair) => {
+                let (source, destination) = move_pair.clone();
+                let action_type =
+                    ctx.feature_state.current_action_type.clone().unwrap_or(ActionType::Automatic);
 
+                apply_moves(
+                    Arc::make_mut(&mut ctx.feature_state.root_registry),
+                    &[move_pair.clone()],
+                );
+                ctx.feature_state.sorted.push(move_pair);
+                ctx.journal.log(Action::Moved { source, destination }, action_type);
+            }
+            HomeMessage::SortingComplete => {
+                let moves = &ctx.feature_state.sorted;
                 if !moves.is_empty()
                     && let Some((old_path, new_path)) = moves.last()
                 {
@@ -213,17 +230,19 @@ impl HomeMessage {
 
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
-            HomeMessage::PurgeComplete { removed } => {
+            HomeMessage::PurgeProgress(removed) => {
+                let action_type =
+                    ctx.feature_state.current_action_type.clone().unwrap_or(ActionType::Automatic);
                 let registry_mut = Arc::make_mut(&mut ctx.feature_state.root_registry);
-                for path in &removed {
-                    registry_mut.shift_remove(path);
-
-                    if let Some(parent) = path.parent() {
-                        if let Some(parent_node) = registry_mut.get_mut(parent) {
-                            parent_node.children.retain(|c| c != path);
-                        }
+                registry_mut.shift_remove(&removed);
+                if let Some(parent) = removed.parent() {
+                    if let Some(parent_node) = registry_mut.get_mut(parent) {
+                        parent_node.children.retain(|c| c != &removed);
                     }
                 }
+                ctx.journal.log(Action::Removed(removed), action_type);
+            }
+            HomeMessage::PurgeComplete => {
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
             HomeMessage::RemovePaths(paths) => {
@@ -243,7 +262,7 @@ impl HomeMessage {
                 if let Some(dir) = new_root {
                     *ctx.root_directory = dir;
                 }
-                return Task::done(HomeMessage::RunFullPipeline.into());
+                return Task::done(HomeMessage::RunFullPipeline(ActionType::Automatic).into());
             }
             HomeMessage::ToggleWatch => {
                 *ctx.watch_status = !*ctx.watch_status;
@@ -577,71 +596,87 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
     })
 }
 
-async fn sort_directory(
+fn sort_directory(
     root: PathBuf,
     registry: Arc<IndexMap<PathBuf, ExplorerNode>>,
     rules: Vec<Rule>,
     overwrite: bool,
-) -> GlobalMessage {
-    let mut sorted = IndexMap::with_capacity(registry.len());
-    let mut new_paths = HashSet::with_capacity(registry.len());
+) -> impl futures::Stream<Item = GlobalMessage> {
+    stream::channel(100, move |mut tx: futures::channel::mpsc::Sender<GlobalMessage>| async move {
+        let mut visited = IndexMap::with_capacity(registry.len());
+        let mut new_paths = HashSet::with_capacity(registry.len());
+        let mut it = registry.iter();
 
-    for (_, node) in registry.iter() {
-        for rule in &rules {
-            if rule.applies_to(&node.path) && !node.unidentified && !sorted.contains_key(&node.path)
-            {
-                let Some(name) = node.path.file_name().and_then(|n| n.to_str()) else {
-                    tracing::error!("could not get file name for {:?}", node.path);
-                    continue;
-                };
+        while let Some((_, node)) = it.next() {
+            let mut moved: Option<(PathBuf, PathBuf)> = None;
+            for rule in &rules {
+                if rule.applies_to(&node.path)
+                    && !node.unidentified
+                    && !visited.contains_key(&node.path)
+                {
+                    let Some(name) = node.path.file_name().and_then(|n| n.to_str()) else {
+                        tracing::error!("could not get file name for {:?}", node.path);
+                        continue;
+                    };
 
-                let dest_parent = root.join(&rule.destination);
-                let dest_path = dest_parent.join(name);
-                if dest_path == node.path {
-                    continue;
+                    let dest_parent = root.join(&rule.destination);
+                    let dest_path = dest_parent.join(name);
+                    if dest_path == node.path {
+                        continue;
+                    }
+
+                    if !overwrite && new_paths.contains(&dest_path) {
+                        tracing::warn!("skipping duplicate destination: {:?}", dest_path);
+                        continue;
+                    }
+
+                    let Ok(_) = smol::fs::create_dir_all(&dest_parent).await else {
+                        tracing::error!(
+                            "failed to create destination directory for {:?}",
+                            dest_path
+                        );
+                        continue;
+                    };
+                    let Ok(_) = smol::fs::rename(&node.path, &dest_path).await else {
+                        tracing::error!("failed to rename file {:?} to {:?}", node.path, dest_path);
+                        continue;
+                    };
+
+                    moved = Some((node.path.clone(), dest_path.clone()));
+                    visited.insert(node.path.clone(), dest_path.clone());
+                    new_paths.insert(dest_path);
+                    break;
                 }
-
-                if !overwrite && new_paths.contains(&dest_path) {
-                    tracing::warn!("skipping duplicate destination: {:?}", dest_path);
-                    continue;
-                }
-
-                let Ok(_) = smol::fs::create_dir_all(&dest_parent).await else {
-                    tracing::error!("failed to create destination directory for {:?}", dest_path);
-                    continue;
-                };
-                let Ok(_) = smol::fs::rename(&node.path, &dest_path).await else {
-                    tracing::error!("failed to rename file {:?} to {:?}", node.path, dest_path);
-                    continue;
-                };
-
-                sorted.insert(node.path.clone(), dest_path.clone());
-                new_paths.insert(dest_path);
-                break;
+            }
+            if let Some(moved) = moved {
+                let _ = tx.send(HomeMessage::SortingProgress(moved).into()).await;
             }
         }
-    }
-    HomeMessage::SortingComplete { sorted_count: sorted.len(), moves: sorted.into_iter().collect() }
-        .into()
+        let _ = tx.send(HomeMessage::SortingComplete.into()).await;
+    })
 }
 
-async fn purge_empty_dirs(registry: Arc<IndexMap<PathBuf, ExplorerNode>>) -> GlobalMessage {
-    let mut dirs: Vec<&PathBuf> =
-        registry.iter().filter(|(_, node)| node.is_dir).map(|(path, _)| path).collect();
+fn purge_empty_dirs(
+    registry: Arc<IndexMap<PathBuf, ExplorerNode>>,
+) -> impl futures::Stream<Item = GlobalMessage> {
+    stream::channel(100, move |mut tx: futures::channel::mpsc::Sender<GlobalMessage>| async move {
+        let mut dirs: Vec<&PathBuf> =
+            registry.iter().filter(|(_, node)| node.is_dir).map(|(path, _)| path).collect();
+        dirs.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
 
-    dirs.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+        let mut removed: HashSet<&PathBuf> = HashSet::new();
+        let mut it = dirs.into_iter();
 
-    let mut removed: HashSet<&PathBuf> = HashSet::new();
+        while let Some(path) = it.next_back() {
+            let Some(node) = registry.get(path) else { continue };
+            let all_children_removed = node.children.iter().all(|child| removed.contains(child));
 
-    for path in dirs {
-        let Some(node) = registry.get(path) else { continue };
-        let all_children_removed = node.children.iter().all(|child| removed.contains(child));
-
-        if node.children.is_empty() || all_children_removed {
-            let _ = smol::fs::remove_dir(path).await;
-            removed.insert(path);
+            if node.children.is_empty() || all_children_removed {
+                let _ = smol::fs::remove_dir(path).await;
+                removed.insert(path);
+                let _ = tx.send(HomeMessage::PurgeProgress(path.clone()).into()).await;
+            }
         }
-    }
-
-    HomeMessage::PurgeComplete { removed: removed.into_iter().cloned().collect() }.into()
+        let _ = tx.send(HomeMessage::PurgeComplete.into()).await;
+    })
 }

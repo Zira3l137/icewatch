@@ -61,8 +61,9 @@ impl App {
         initialize_features(&mut app);
         (
             app,
-            Task::done(Message::App(AppMessage::View(Window::Main)))
-                .chain(Task::done(main::HomeMessage::RunFullPipeline.into())),
+            Task::done(Message::App(AppMessage::View(Window::Main))).chain(Task::done(
+                main::HomeMessage::RunFullPipeline(ActionType::Automatic).into(),
+            )),
         )
     }
 

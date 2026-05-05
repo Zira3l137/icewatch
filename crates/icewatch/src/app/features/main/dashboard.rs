@@ -54,7 +54,7 @@ pub(crate) fn dashboard<'a>(
 
     let sorted_count = rich_text([
         Span::<()>::new(local("sorted_icon")).size(ICON_SIZE).color(palette.primary.base.color),
-        Span::new(ctx.feature_state.sorted_count),
+        Span::new(ctx.feature_state.sorted.len()),
     ]);
 
     let last_file_info = rich_text([

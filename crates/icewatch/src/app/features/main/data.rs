@@ -22,7 +22,7 @@ impl std::fmt::Display for Criterion {
 
 /// Represents the current IO pipeline stage.
 #[derive(Debug, Clone, Default)]
-pub enum PipelineStage {
+pub(crate) enum PipelineStage {
     /// Represents the full indexing stage, scanning the entire root directory recursively.
     #[default]
     IndexFull,

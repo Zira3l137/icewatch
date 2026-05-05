@@ -54,7 +54,8 @@ fn controls_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, Globa
     let toggle_icon = if *ctx.watch_status { local("pause_btn") } else { local("resume_btn") };
     let toggle_btn =
         button(toggle_icon).on_press(HomeMessage::ToggleWatch.into()).style(toggle_style);
-    let update_btn = button(local("update_btn")).on_press(HomeMessage::RunFullPipeline.into());
+    let update_btn = button(local("update_btn"))
+        .on_press(HomeMessage::RunFullPipeline(ActionType::Manual).into());
     let journal_btn = button(local("journal_btn")).on_press(HomeMessage::OpenJournal.into());
 
     let rules_btn = button(local("rules_btn")).on_press(HomeMessage::OpenRules.into());
