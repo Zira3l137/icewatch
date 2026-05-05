@@ -9,8 +9,6 @@ pub(crate) enum JournalMessage {}
 
 impl JournalMessage {
     pub(crate) fn update<'a>(self, _ctx: ContextMut<'a>) -> Task<GlobalMessage> {
-        match self {
-            _ => Task::none(),
-        }
+        Task::none()
     }
 }
