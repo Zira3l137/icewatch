@@ -9,11 +9,11 @@ use icewatch_utils::locale::Locale;
 use crate::app::features::CONTAINER_PADDING;
 use crate::app::features::main::Context;
 use crate::app::features::main::GlobalMessage;
-use crate::app::features::main::message::HomeMessage;
+use crate::app::features::main::messages::HomeMessage;
 
 pub(crate) fn context_menu<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
-    let btn_style = button::text;
+    let btn_style = button::subtle;
     let open_btn =
         button(local("open_btn")).on_press(HomeMessage::OpenNode.into()).style(btn_style);
     let show_btn =
