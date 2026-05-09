@@ -15,7 +15,6 @@ use crate::app::features::ROW_SPACING;
 use crate::app::features::main::Context;
 use crate::app::features::main::GlobalMessage;
 use crate::app::features::main::messages::HomeMessage;
-use crate::journal::ActionType;
 
 pub(crate) fn toolbar<'a>(locale: &'a Locale, ctx: Context<'a>) -> Element<'a, GlobalMessage> {
     let controls_panel = controls_panel(ctx.clone(), locale);
@@ -50,8 +49,7 @@ fn controls_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, Globa
     let toggle_icon = if *ctx.watch_status { local("pause_btn") } else { local("resume_btn") };
     let toggle_btn =
         button(toggle_icon).on_press(HomeMessage::ToggleWatch.into()).style(toggle_style);
-    let update_btn = button(local("update_btn"))
-        .on_press(HomeMessage::RunFullPipeline(ActionType::Manual).into());
+    let update_btn = button(local("update_btn")).on_press(HomeMessage::RunFullPipeline.into());
     let journal_btn = button(local("journal_btn")).on_press(HomeMessage::OpenJournal.into());
 
     let rules_btn = button(local("rules_btn")).on_press(HomeMessage::OpenRules.into());

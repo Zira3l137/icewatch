@@ -2,7 +2,6 @@ use std::path::Path;
 
 use chrono::Duration;
 use chrono::Local;
-use iced::Background;
 use iced::Color;
 use iced::Element;
 use iced::Length;
@@ -34,6 +33,7 @@ use crate::app::features::main::GlobalMessage;
 use crate::app::features::main::JournalMessage;
 use crate::app::main::data::JournalEntrySection;
 use crate::journal::Action;
+use crate::journal::ActionType;
 use crate::journal::Entry;
 use crate::journal::Journal;
 
@@ -85,34 +85,49 @@ fn journal_entry<'a>(
     palette: &'a Extended,
 ) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
-    let (action, action_color, action_text): (String, Color, String) = match &entry.action {
-        Action::Moved { source, destination } => (
-            format!("{} ({})", local("journal_entry_moved"), entry.action_type),
-            palette.warning.base.color,
-            format!("{} -> {}", short_path(source, 1), short_path(destination, 2),),
-        ),
-        Action::Removed(path) => (
-            format!("{} ({})", local("journal_entry_removed"), entry.action_type),
-            palette.danger.base.color,
-            format!("{}", path.display()),
-        ),
-        Action::Downloaded(path) => (
-            format!("{} ({})", local("journal_entry_downloaded"), entry.action_type),
-            palette.success.base.color,
-            format!("{}", path.display()),
-        ),
-    };
+    let (action, action_color, action_text, action_type): (String, Color, String, ActionType) =
+        match &entry.action {
+            Action::Moved { source, destination } => (
+                format!("{}", local("journal_entry_moved")),
+                palette.warning.base.color,
+                format!("{} -> {}", short_path(source, 1), short_path(destination, 2),),
+                entry.action_type.clone(),
+            ),
+            Action::Renamed { source, destination } => (
+                format!("{}", local("journal_entry_renamed")),
+                palette.warning.base.color,
+                format!("{} -> {}", short_path(source, 1), short_path(destination, 2),),
+                entry.action_type.clone(),
+            ),
+            Action::Removed(path) => (
+                format!("{}", local("journal_entry_removed")),
+                palette.danger.base.color,
+                format!("{}", path.display()),
+                entry.action_type.clone(),
+            ),
+            Action::Downloaded(path) => (
+                format!("{}", local("journal_entry_downloaded")),
+                palette.success.base.color,
+                format!("{}", path.display()),
+                entry.action_type.clone(),
+            ),
+        };
 
     let entry_action_text: Element<'a, GlobalMessage> =
-        rich_text![Span::<()>::new(action).background(Background::Color(action_color))]
-            .size(ICON_SIZE)
-            .into();
+        rich_text![Span::<()>::new(action).color(action_color)].size(ICON_SIZE).into();
     let entry_contents: Element<'a, GlobalMessage> = text(action_text).into();
     let entry_time: Element<'a, GlobalMessage> =
         text(entry.time.format("%H:%M:%S %Y-%m-%d").to_string())
             .size(ICON_SIZE)
             .color(palette.primary.base.color)
             .into();
+    let entry_action_type: Element<'a, GlobalMessage> = text(match action_type {
+        ActionType::Automatic => "A",
+        ActionType::Manual => "U",
+    })
+    .size(ICON_SIZE)
+    .color(palette.secondary.base.color)
+    .into();
 
     container(
         row([
@@ -124,6 +139,7 @@ fn journal_entry<'a>(
                 .into(),
             space::horizontal().into(),
             entry_time,
+            entry_action_type,
         ])
         .align_y(Vertical::Center)
         .spacing(ROW_SPACING)
