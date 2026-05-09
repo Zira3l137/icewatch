@@ -3,4 +3,5 @@
 *.ps1
 *.sh
 *.nu
+state.toml
 Cargo.lock

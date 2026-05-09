@@ -1,5 +1,13 @@
 use std::path::PathBuf;
 
+pub const DOWNLOAD_TEMP_EXTENSIONS: &[&str] = &[
+    "part",       // Firefox
+    "crdownload", // Chrome
+    "download",   // Safari / misc
+    "opdownload", // Opera
+    "tmp",
+];
+
 /// A helper enum used by a sorting criterion selector in the Ui.
 #[derive(Debug, Clone, Default)]
 pub(crate) enum Criterion {
@@ -28,7 +36,7 @@ pub(crate) enum PipelineStage {
     IndexFull,
 
     /// Represents a partial indexing stage, scanning only the specified paths.
-    IndexPaths(Vec<PathBuf>),
+    IndexPaths(Vec<(PathBuf, bool)>),
 
     /// Represents a stage that purges empty directories recursively at the root.
     PurgeEmptyDirs,

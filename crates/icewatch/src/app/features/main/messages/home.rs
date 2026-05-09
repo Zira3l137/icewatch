@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -17,6 +16,7 @@ use indexmap::IndexMap;
 use notify::EventKind;
 use notify::RecursiveMode;
 use notify::Watcher;
+use notify::event::CreateKind;
 use notify::event::ModifyKind;
 use notify::event::RenameMode;
 use notify::recommended_watcher;
@@ -25,6 +25,7 @@ use smol::stream::StreamExt;
 use crate::app::Window;
 use crate::app::features::main::ContextMut;
 use crate::app::features::main::Message;
+use crate::app::features::main::data::DOWNLOAD_TEMP_EXTENSIONS;
 use crate::app::features::main::data::PipelineStage;
 use crate::app::features::main::elements::explorer::ExplorerNode;
 use crate::app::features::main::view::MainView;
@@ -39,7 +40,7 @@ use crate::rules::Rule;
 #[derive(Debug, Clone)]
 pub(crate) enum HomeMessage {
     /// Represents a progress update during indexing.
-    IndexingProgress(PathBuf, ExplorerNode),
+    IndexingProgress { path: PathBuf, node: ExplorerNode, is_downloaded: bool },
 
     /// Represents the completion of indexing.
     IndexingComplete { indexed_date: DateTime<Local>, downloaded_count: usize },
@@ -57,7 +58,7 @@ pub(crate) enum HomeMessage {
     PurgeComplete,
 
     /// Represents a request to run a partial pipeline. (takes a list of paths to index)
-    RunPartialPipeline(Vec<PathBuf>),
+    RunPartialPipeline(Vec<(PathBuf, bool)>),
 
     /// Represents a request to run the full pipeline. (indexing all files in the root recursively)
     RunFullPipeline(ActionType),
@@ -66,7 +67,7 @@ pub(crate) enum HomeMessage {
     AdvancePipeline,
 
     /// Represents a request to remove paths from the registry.
-    RemovePaths(Vec<PathBuf>),
+    RemovePaths { paths: Vec<PathBuf>, action_type: ActionType },
 
     /// Represents a request to capture a mouse button press.
     CaptureMouseBtn(mouse::Button),
@@ -194,7 +195,10 @@ impl HomeMessage {
                 ctx.feature_state.pipeline_queue = queue;
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
-            HomeMessage::IndexingProgress(path, node) => {
+            HomeMessage::IndexingProgress { path, node, is_downloaded } => {
+                if is_downloaded {
+                    ctx.journal.log(Action::Downloaded(path.clone()), ActionType::Automatic);
+                }
                 Arc::make_mut(&mut ctx.feature_state.root_registry).insert(path, node);
             }
             HomeMessage::IndexingComplete { indexed_date, downloaded_count } => {
@@ -242,9 +246,10 @@ impl HomeMessage {
             HomeMessage::PurgeComplete => {
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
-            HomeMessage::RemovePaths(paths) => {
+            HomeMessage::RemovePaths { paths, action_type } => {
                 let registry_mut = Arc::make_mut(&mut ctx.feature_state.root_registry);
                 for path in &paths {
+                    ctx.journal.log(Action::Removed(path.clone()), action_type.clone());
                     registry_mut.shift_remove(path);
                     if let Some(parent) = path.parent() {
                         if let Some(parent_node) = registry_mut.get_mut(parent) {
@@ -398,16 +403,16 @@ impl HomeMessage {
 
 fn index_paths_stream(
     root: PathBuf,
-    paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    paths: impl IntoIterator<Item = (PathBuf, bool)>,
     downloaded_count: usize,
 ) -> impl futures::Stream<Item = GlobalMessage> {
     stream::channel(100, move |mut tx: futures::channel::mpsc::Sender<GlobalMessage>| async move {
         let indexed_date = Local::now();
-        let paths = paths.into_iter().map(|p| p.as_ref().to_path_buf()).collect::<Vec<PathBuf>>();
+        let paths = paths.into_iter().collect::<Vec<(PathBuf, bool)>>();
         let mut stack = VecDeque::from(paths);
         let mut downloaded_count = downloaded_count;
 
-        while let Some(path) = stack.pop_front() {
+        while let Some((path, is_downloaded)) = stack.pop_front() {
             let metadata = smol::fs::metadata(&path).await;
 
             let mut is_directory = false;
@@ -422,7 +427,7 @@ fn index_paths_stream(
                 not_available = false;
                 size_bytes = metadata.len();
                 created_at = DateTime::<Local>::from(created);
-                if created_at.date_naive() == indexed_date.date_naive() {
+                if is_downloaded {
                     downloaded_count += 1;
                 }
             }
@@ -433,7 +438,7 @@ fn index_paths_stream(
                     while let Some(Ok(entry)) = entries.next().await {
                         children.push(entry.path());
                     }
-                    stack.extend(children.iter().cloned());
+                    stack.extend(children.iter().cloned().map(|p| (p, is_downloaded)));
                 }
             }
 
@@ -447,7 +452,9 @@ fn index_paths_stream(
                     expanded: false,
                     children,
                 };
-                let _ = tx.send(HomeMessage::IndexingProgress(path, node).into()).await;
+                let _ = tx
+                    .send(HomeMessage::IndexingProgress { path, node, is_downloaded }.into())
+                    .await;
             }
         }
 
@@ -460,7 +467,6 @@ fn index_directory_stream(root: PathBuf) -> impl futures::Stream<Item = GlobalMe
     stream::channel(100, |mut tx: futures::channel::mpsc::Sender<GlobalMessage>| async move {
         let indexed_date = Local::now();
         let mut stack = VecDeque::from([root.clone()]);
-        let mut downloaded_count = 0usize;
 
         while let Some(path) = stack.pop_front() {
             let metadata = smol::fs::metadata(&path).await;
@@ -477,9 +483,6 @@ fn index_directory_stream(root: PathBuf) -> impl futures::Stream<Item = GlobalMe
                 not_available = false;
                 size_bytes = metadata.len();
                 created_at = DateTime::<Local>::from(created);
-                if created_at.date_naive() == indexed_date.date_naive() {
-                    downloaded_count += 1;
-                }
             }
 
             let mut children = vec![];
@@ -502,12 +505,15 @@ fn index_directory_stream(root: PathBuf) -> impl futures::Stream<Item = GlobalMe
                     expanded: false,
                     children,
                 };
-                let _ = tx.send(HomeMessage::IndexingProgress(path, node).into()).await;
+                let _ = tx
+                    .send(HomeMessage::IndexingProgress { path, node, is_downloaded: false }.into())
+                    .await;
             }
         }
 
-        let _ =
-            tx.send(HomeMessage::IndexingComplete { indexed_date, downloaded_count }.into()).await;
+        let _ = tx
+            .send(HomeMessage::IndexingComplete { indexed_date, downloaded_count: 0 }.into())
+            .await;
     })
 }
 
@@ -563,28 +569,76 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
 
         watcher.watch(&root, RecursiveMode::Recursive).expect("failed to watch directory");
 
+        let mut pending_downloads: HashSet<PathBuf> = HashSet::new();
+        let mut completed_downloads: HashSet<PathBuf> = HashSet::new();
+
         // Main thread receives events from the notify channel and sends them to the stream.
         // If the channel is empty, the async executor will suspend the task until an event arrives.
         // If it receives an event, it sends it to the stream.
         while let Ok(Ok(event)) = notify_rx.recv().await {
             let msg = match event.kind {
-                EventKind::Create(_) => Some(HomeMessage::RunPartialPipeline(event.paths)),
-                EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    Some(HomeMessage::RemovePaths(event.paths))
-                }
-                EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                    Some(HomeMessage::RunPartialPipeline(event.paths))
-                }
-                EventKind::Modify(ModifyKind::Name(RenameMode::Any)) => {
-                    // Can't tell direction — check if path exists to decide
-                    let path = &event.paths[0];
-                    if path.exists() {
-                        Some(HomeMessage::RunPartialPipeline(event.paths))
+                EventKind::Create(CreateKind::Any) => {
+                    // Catch temp file creation events and filter them out processing only real file creations
+                    tracing::debug!("CreateAny: {:#?}", &event.paths);
+                    let (temp, real): (Vec<_>, Vec<_>) = event.paths.into_iter().partition(|p| {
+                        DOWNLOAD_TEMP_EXTENSIONS
+                            .iter()
+                            .any(|ext| p.extension().map_or(false, |e| e == *ext))
+                    });
+                    pending_downloads.extend(temp);
+
+                    // Only pipeline real files that already have content
+                    let non_empty: Vec<_> = real
+                        .into_iter()
+                        .filter(|p| std::fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false))
+                        .collect();
+
+                    if !non_empty.is_empty() {
+                        Some(HomeMessage::RunPartialPipeline(
+                            non_empty.into_iter().map(|p| (p, false)).collect(),
+                        ))
                     } else {
-                        Some(HomeMessage::RemovePaths(event.paths))
+                        None
                     }
                 }
-                EventKind::Remove(_) => Some(HomeMessage::RemovePaths(event.paths)),
+                EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                    // Filter out temp file renames and process remaining paths (regular renames)
+                    let (completed, real): (Vec<_>, Vec<_>) =
+                        event.paths.into_iter().partition(|p| pending_downloads.remove(p));
+                    completed_downloads.extend(completed);
+                    if !real.is_empty() {
+                        let payload = real.into_iter().map(|p| (p, false)).collect::<Vec<_>>();
+                        Some(HomeMessage::RunPartialPipeline(payload))
+                    } else {
+                        None
+                    }
+                }
+                EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                    // Construct the final payload checking each path against completed downloads
+                    let payload = event
+                        .paths
+                        .into_iter()
+                        .map(|p| {
+                            // Pop one graduated entry per destination path.
+                            // The From/To pair guarantees 1:1 correspondence.
+                            let is_download = completed_downloads
+                                .iter()
+                                .next()
+                                .cloned()
+                                .map(|key| {
+                                    completed_downloads.remove(&key);
+                                    true
+                                })
+                                .unwrap_or(false);
+                            (p, is_download)
+                        })
+                        .collect::<Vec<_>>();
+                    Some(HomeMessage::RunPartialPipeline(payload))
+                }
+                EventKind::Remove(_) => Some(HomeMessage::RemovePaths {
+                    paths: event.paths,
+                    action_type: ActionType::Manual,
+                }),
                 _ => None,
             };
 

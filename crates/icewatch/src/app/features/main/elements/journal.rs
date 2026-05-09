@@ -85,15 +85,20 @@ fn journal_entry<'a>(
     palette: &'a Extended,
 ) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
-    let (action, action_color, action_text): (&str, Color, String) = match &entry.action {
+    let (action, action_color, action_text): (String, Color, String) = match &entry.action {
         Action::Moved { source, destination } => (
-            local("journal_entry_moved"),
-            palette.success.base.color,
+            format!("{} ({})", local("journal_entry_moved"), entry.action_type),
+            palette.warning.base.color,
             format!("{} -> {}", short_path(source, 1), short_path(destination, 2),),
         ),
         Action::Removed(path) => (
-            local("journal_entry_removed"),
+            format!("{} ({})", local("journal_entry_removed"), entry.action_type),
             palette.danger.base.color,
+            format!("{}", path.display()),
+        ),
+        Action::Downloaded(path) => (
+            format!("{} ({})", local("journal_entry_downloaded"), entry.action_type),
+            palette.success.base.color,
             format!("{}", path.display()),
         ),
     };
