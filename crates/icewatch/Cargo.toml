@@ -5,6 +5,9 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.12"
+
 [dependencies]
 icewatch-utils.path = "../icewatch-utils"
 icewatch-theme.path = "../icewatch-theme"
