@@ -76,6 +76,11 @@ It will appear in the theme selector on next launch alongside the 22 built-in th
     --log-to-file          Write logs to icewatch.log in addition to the console
 ```
 
+## Roadmap
+
+- [ ] More criteria for more granular sorting rules.
+- [ ] System tray icon and notifications.
+
 ## Built with
 
 - [iced](https://github.com/iced-rs/iced) — GUI framework
