@@ -1,6 +1,7 @@
 use iced::Color;
 use iced::Element;
 use iced::Length;
+use iced::alignment::Vertical;
 use iced::mouse;
 use iced::theme::palette::Extended;
 use iced::widget::button;
@@ -36,8 +37,11 @@ pub(crate) fn rules_panel<'a>(
     let no_rules = ctx.sorting_rules.is_empty();
     no_rules.then_some(space().into()).unwrap_or(
         container(list_box(ctx.clone(), locale, palette))
-            .style(container::bordered_box)
+            .height(Length::Shrink)
+            .width(Length::Fill)
+            .align_y(Vertical::Top)
             .padding(CONTAINER_PADDING)
+            .style(container::bordered_box)
             .into(),
     )
 }
@@ -61,6 +65,10 @@ pub(crate) fn control_panel<'a>(
         .spacing(COL_SPACING)
         .padding(COL_PADDING),
     )
+    .height(Length::Shrink)
+    .width(Length::Fill)
+    .align_y(Vertical::Top)
+    .padding(CONTAINER_PADDING)
     .style(container::bordered_box)
     .into()
 }
@@ -126,8 +134,11 @@ pub(crate) fn edit_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a
         .padding(COL_PADDING)
         .spacing(COL_SPACING),
     )
-    .style(container::bordered_box)
+    .height(Length::Shrink)
+    .width(Length::Fill)
+    .align_y(Vertical::Top)
     .padding(CONTAINER_PADDING)
+    .style(container::bordered_box)
     .into()
 }
 
