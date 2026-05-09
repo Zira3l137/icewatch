@@ -8,6 +8,7 @@ use iced::Element;
 use iced::Length;
 use iced::alignment::Vertical;
 use iced::theme::palette::Extended;
+use iced::widget::button;
 use iced::widget::column;
 use iced::widget::container;
 use iced::widget::rich_text;
@@ -17,16 +18,20 @@ use iced::widget::scrollable;
 use iced::widget::space;
 use iced::widget::text;
 use iced::widget::text::Span;
+use iced::widget::text_input;
 use icewatch_utils::locale::Locale;
 
 use crate::app::features::COL_PADDING;
 use crate::app::features::COL_SPACING;
 use crate::app::features::CONTAINER_PADDING;
 use crate::app::features::ICON_SIZE;
+use crate::app::features::ROW_PADDING;
 use crate::app::features::ROW_SPACING;
 use crate::app::features::SCROLLBAR_SPACING;
 use crate::app::features::SEPARATOR_SIZE;
+use crate::app::features::main::Context;
 use crate::app::features::main::GlobalMessage;
+use crate::app::features::main::JournalMessage;
 use crate::app::main::data::JournalEntrySection;
 use crate::journal::Action;
 use crate::journal::Entry;
@@ -34,7 +39,7 @@ use crate::journal::Journal;
 
 pub(crate) fn journal_entry_section<'a>(
     section: JournalEntrySection,
-    entries: &'a Journal,
+    journal: &Journal,
     locale: &'a Locale,
     palette: &'a Extended,
 ) -> Element<'a, GlobalMessage> {
@@ -42,17 +47,17 @@ pub(crate) fn journal_entry_section<'a>(
     let (section_name, entries) = match section {
         JournalEntrySection::Today => (
             local("today_entries"),
-            entries.entries_between(Local::now() - Duration::days(1), Local::now()),
+            journal.entries_between(Local::now() - Duration::days(1), Local::now()),
         ),
         JournalEntrySection::Yesterday => (
             local("yesterday_entries"),
-            entries.entries_between(
+            journal.entries_between(
                 Local::now() - Duration::days(2),
                 Local::now() - Duration::days(1),
             ),
         ),
         JournalEntrySection::All => {
-            (local("all_entries"), entries.entries_before(Local::now() - Duration::days(2)))
+            (local("all_entries"), journal.entries_before(Local::now() - Duration::days(2)))
         }
     };
 
@@ -75,7 +80,7 @@ pub(crate) fn journal_entry_section<'a>(
 }
 
 fn journal_entry<'a>(
-    entry: &'a Entry,
+    entry: &Entry,
     locale: &'a Locale,
     palette: &'a Extended,
 ) -> Element<'a, GlobalMessage> {
@@ -141,4 +146,24 @@ fn short_path(path: &Path, max_depth: usize) -> String {
         .rev()
         .collect::<Vec<_>>()
         .join("/")
+}
+
+pub(crate) fn filter_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMessage> {
+    let local = |key: &str| locale.get_string("main", key);
+    let search_bar: Element<'a, GlobalMessage> =
+        text_input(local("search_bar"), &ctx.feature_state.journal_filter)
+            .on_input(|i| JournalMessage::JournalFilterInput(i).into())
+            .on_paste(|p| JournalMessage::JournalFilterInput(p).into())
+            .into();
+
+    let abort_btn: Element<'a, GlobalMessage> =
+        button(local("abort_btn")).on_press(JournalMessage::JournalFilterClear.into()).into();
+
+    container(row([search_bar, abort_btn]).padding(ROW_PADDING).spacing(ROW_SPACING))
+        .height(Length::Shrink)
+        .width(Length::Fill)
+        .align_y(Vertical::Top)
+        .padding(CONTAINER_PADDING)
+        .style(container::bordered_box)
+        .into()
 }

@@ -36,16 +36,12 @@ fn search_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalM
         text_input(local("search_bar"), &ctx.feature_state.search_query)
             .on_input(|i| HomeMessage::SearchBarInput(i).into())
             .on_paste(|p| HomeMessage::SearchBarInput(p).into())
-            .on_submit(HomeMessage::SearchBarSubmit.into())
             .into();
-
-    let submit_btn: Element<'a, GlobalMessage> =
-        button(local("submit_btn")).on_press(HomeMessage::SearchBarSubmit.into()).into();
 
     let abort_btn: Element<'a, GlobalMessage> =
         button(local("abort_btn")).on_press(HomeMessage::SearchClear.into()).into();
 
-    row([search_bar, submit_btn, abort_btn]).padding(ROW_PADDING).spacing(ROW_SPACING).into()
+    row([search_bar, abort_btn]).padding(ROW_PADDING).spacing(ROW_SPACING).into()
 }
 
 fn controls_panel<'a>(ctx: Context<'a>, locale: &'a Locale) -> Element<'a, GlobalMessage> {

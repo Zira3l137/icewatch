@@ -47,6 +47,7 @@ pub struct State {
     current_view: MainView,
     search_requested: bool,
     search_query: String,
+    journal_filter: String,
     search_results: IndexMap<PathBuf, ExplorerNode>,
     watch_status_buffer: bool,
     pipeline_queue: VecDeque<PipelineStage>,
@@ -138,7 +139,6 @@ pub fn init(_ctx: ContextMut<'_>) {}
 pub enum Message {
     Home(HomeMessage),
     Rules(RulesMessage),
-    #[expect(dead_code)]
     Journal(JournalMessage),
     Return,
 }

@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::path::PathBuf;
 
 use chrono::DateTime;
@@ -48,5 +49,24 @@ impl Journal {
         end: DateTime<Local>,
     ) -> Vec<&Entry> {
         self.entries.iter().filter(|e| e.time >= start && e.time <= end).collect()
+    }
+
+    pub(crate) fn filtered(&self, mut predicate: impl FnMut(&Path) -> bool) -> Self {
+        self.entries
+            .clone()
+            .into_iter()
+            .filter(|e| match &e.action {
+                Action::Moved { source, destination } => {
+                    predicate(&source) || predicate(&destination)
+                }
+                Action::Removed(path) => predicate(&path),
+            })
+            .collect()
+    }
+}
+
+impl FromIterator<Entry> for Journal {
+    fn from_iter<T: IntoIterator<Item = Entry>>(iter: T) -> Self {
+        Self { entries: iter.into_iter().collect() }
     }
 }

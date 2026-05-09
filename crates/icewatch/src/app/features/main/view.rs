@@ -1,6 +1,7 @@
 use iced::Element;
 use iced::Length;
 use iced::Theme;
+use iced::alignment::Vertical;
 use iced::widget::column;
 use iced::widget::container;
 use iced::widget::scrollable;
@@ -19,6 +20,7 @@ use crate::app::features::main::data::JournalEntrySection;
 use crate::app::features::main::elements::context_menu;
 use crate::app::features::main::elements::dashboard;
 use crate::app::features::main::elements::explorer;
+use crate::app::features::main::elements::journal::filter_panel;
 use crate::app::features::main::elements::toolbar;
 use crate::app::main::elements::common::return_panel;
 use crate::app::main::elements::journal::journal_entry_section;
@@ -77,35 +79,49 @@ impl MainView {
                 )
                 .align_top(Length::Shrink)
                 .padding(CONTAINER_PADDING)
-                .style(container::bordered_box)
                 .into()
             }
             MainView::Journal => {
-                let return_panel: Element<'a, GlobalMessage> = return_panel(locale);
+                let journal = if ctx.feature_state.journal_filter.trim().is_empty() {
+                    ctx.journal
+                } else {
+                    &ctx.journal.filtered(|path| {
+                        path.components().any(|c| {
+                            c.as_os_str()
+                                .to_string_lossy()
+                                .to_ascii_lowercase()
+                                .contains(&ctx.feature_state.journal_filter)
+                        })
+                    })
+                };
 
                 let today_entries: Element<'a, GlobalMessage> =
-                    journal_entry_section(JournalEntrySection::Today, ctx.journal, locale, palette);
-                let yesterday_entries: Element<'a, GlobalMessage> = journal_entry_section(
-                    JournalEntrySection::Yesterday,
-                    ctx.journal,
-                    locale,
-                    palette,
-                );
+                    journal_entry_section(JournalEntrySection::Today, journal, locale, palette);
+                let yesterday_entries: Element<'a, GlobalMessage> =
+                    journal_entry_section(JournalEntrySection::Yesterday, journal, locale, palette);
                 let all_entries: Element<'a, GlobalMessage> =
-                    journal_entry_section(JournalEntrySection::All, ctx.journal, locale, palette);
+                    journal_entry_section(JournalEntrySection::All, journal, locale, palette);
+
+                let return_panel: Element<'a, GlobalMessage> = return_panel(locale);
+                let filter_panel: Element<'a, GlobalMessage> = filter_panel(ctx.clone(), locale);
+                let entries_panel: Element<'a, GlobalMessage> = container(
+                    scrollable(column![today_entries, yesterday_entries, all_entries])
+                        .spacing(SCROLLBAR_SPACING),
+                )
+                .height(Length::Shrink)
+                .width(Length::Fill)
+                .align_y(Vertical::Top)
+                .padding(CONTAINER_PADDING)
+                .style(container::bordered_box)
+                .into();
 
                 container(
-                    column![
-                        return_panel,
-                        scrollable(column![today_entries, yesterday_entries, all_entries])
-                            .spacing(SCROLLBAR_SPACING)
-                    ]
-                    .padding(ROW_PADDING)
-                    .spacing(ROW_SPACING),
+                    column![return_panel, filter_panel, entries_panel]
+                        .padding(ROW_PADDING)
+                        .spacing(ROW_SPACING),
                 )
                 .align_top(Length::Shrink)
                 .padding(CONTAINER_PADDING)
-                .style(container::bordered_box)
                 .into()
             }
         }

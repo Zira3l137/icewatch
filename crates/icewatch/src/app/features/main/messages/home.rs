@@ -95,9 +95,6 @@ pub(crate) enum HomeMessage {
     /// Represents an input event from the search bar.
     SearchBarInput(String),
 
-    /// Represents a request to submit the search bar input.
-    SearchBarSubmit,
-
     /// Represents a request to clear the search bar input and abort search.
     SearchClear,
 
@@ -274,47 +271,49 @@ impl HomeMessage {
                 ctx.feature_state.search_requested = false;
                 ctx.feature_state.search_results.clear();
             }
-            HomeMessage::SearchBarInput(i) => {
-                ctx.feature_state.search_query = i;
-            }
-            HomeMessage::SearchBarSubmit => {
-                let term = ctx.feature_state.search_query.to_ascii_lowercase();
-                ctx.feature_state.search_requested = true;
+            HomeMessage::SearchBarInput(term) => {
+                ctx.feature_state.search_query = term.clone();
+                if !term.trim().is_empty() {
+                    ctx.feature_state.search_requested = true;
+                    let mut results: IndexMap<PathBuf, ExplorerNode> = IndexMap::new();
 
-                let mut results: IndexMap<PathBuf, ExplorerNode> = IndexMap::new();
+                    for (path, node) in ctx.feature_state.root_registry.iter() {
+                        let matches = path
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .map_or(false, |name| name.to_ascii_lowercase().contains(&term));
 
-                for (path, node) in ctx.feature_state.root_registry.iter() {
-                    let matches = path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .map_or(false, |name| name.to_ascii_lowercase().contains(&term));
+                        if !matches {
+                            continue;
+                        }
 
-                    if !matches {
-                        continue;
-                    }
+                        // Insert the matched node itself
+                        results.entry(path.clone()).or_insert_with(|| node.clone());
 
-                    // Insert the matched node itself
-                    results.entry(path.clone()).or_insert_with(|| node.clone());
-
-                    // Ensure its parent exists in results with this path in its children
-                    if let Some(parent_path) = path.parent()
-                        && let Some(parent_node) = ctx.feature_state.root_registry.get(parent_path)
-                    {
-                        let parent =
-                            results.entry(parent_path.to_path_buf()).or_insert_with(|| {
-                                ExplorerNode {
-                                    children: vec![],
-                                    expanded: true,
-                                    ..parent_node.clone()
-                                }
-                            });
-                        if !parent.children.contains(path) {
-                            parent.children.push(path.clone());
+                        // Ensure its parent exists in results with this path in its children
+                        if let Some(parent_path) = path.parent()
+                            && let Some(parent_node) =
+                                ctx.feature_state.root_registry.get(parent_path)
+                        {
+                            let parent =
+                                results.entry(parent_path.to_path_buf()).or_insert_with(|| {
+                                    ExplorerNode {
+                                        children: vec![],
+                                        expanded: true,
+                                        ..parent_node.clone()
+                                    }
+                                });
+                            if !parent.children.contains(path) {
+                                parent.children.push(path.clone());
+                            }
                         }
                     }
-                }
 
-                ctx.feature_state.search_results = results;
+                    ctx.feature_state.search_results = results;
+                } else {
+                    ctx.feature_state.search_requested = false;
+                    ctx.feature_state.search_results.clear();
+                }
             }
             HomeMessage::OpenRules => {
                 ctx.feature_state.current_view = MainView::Rules;
