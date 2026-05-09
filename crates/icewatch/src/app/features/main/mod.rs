@@ -36,7 +36,6 @@ use crate::app::features::DEFAULT_THEME;
 use crate::app::message::InputEvent;
 use crate::app::message::Message as GlobalMessage;
 use crate::app::state::FeatureMessage;
-use crate::journal::ActionType;
 use crate::journal::Journal;
 use crate::rules::CriterionKind;
 use crate::rules::Rule;

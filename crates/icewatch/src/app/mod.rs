@@ -27,7 +27,6 @@ use state::route_feature_update;
 
 use crate::app::features::main;
 use crate::app::message::InputEvent;
-use crate::journal::ActionType;
 
 pub(crate) const STATE_PATH: &str = "state.toml";
 
@@ -61,9 +60,8 @@ impl App {
         initialize_features(&mut app);
         (
             app,
-            Task::done(Message::App(AppMessage::View(Window::Main))).chain(Task::done(
-                main::HomeMessage::RunFullPipeline(ActionType::Automatic).into(),
-            )),
+            Task::done(Message::App(AppMessage::View(Window::Main)))
+                .chain(Task::done(main::HomeMessage::RunFullPipeline.into())),
         )
     }
 
