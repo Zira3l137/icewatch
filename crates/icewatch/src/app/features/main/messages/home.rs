@@ -27,6 +27,7 @@ use crate::app::features::main::ContextMut;
 use crate::app::features::main::Message;
 use crate::app::features::main::data::DOWNLOAD_TEMP_EXTENSIONS;
 use crate::app::features::main::data::PipelineStage;
+use crate::app::features::main::data::WatcherEvent;
 use crate::app::features::main::elements::explorer::ExplorerNode;
 use crate::app::features::main::view::MainView;
 use crate::app::message::AppMessage;
@@ -51,6 +52,9 @@ pub(crate) enum HomeMessage {
     /// Represents the completion of sorting.
     SortingComplete,
 
+    /// Represents a file system event caught by the watcher.
+    WatcherEvent(WatcherEvent),
+
     /// Represents the progress of purging.
     PurgeProgress(PathBuf),
 
@@ -61,7 +65,7 @@ pub(crate) enum HomeMessage {
     RunPartialPipeline(Vec<(PathBuf, bool)>),
 
     /// Represents a request to run the full pipeline. (indexing all files in the root recursively)
-    RunFullPipeline(ActionType),
+    RunFullPipeline,
 
     /// Represents a request to advance the pipeline.
     AdvancePipeline,
@@ -147,7 +151,6 @@ impl HomeMessage {
                     return Task::stream(purge_empty_dirs(registry));
                 }
                 None => {
-                    ctx.feature_state.current_action_type = None;
                     ctx.feature_state.is_loading = false;
                     *ctx.watch_status = ctx.feature_state.watch_status_buffer;
                 }
@@ -155,7 +158,6 @@ impl HomeMessage {
             HomeMessage::RunPartialPipeline(paths) => {
                 ctx.feature_state.watch_status_buffer = ctx.watch_status.clone();
                 *ctx.watch_status = false;
-
                 ctx.feature_state.is_loading = true;
 
                 let mut queue = VecDeque::new();
@@ -170,16 +172,13 @@ impl HomeMessage {
                 ctx.feature_state.pipeline_queue = queue;
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
-            HomeMessage::RunFullPipeline(action_type) => {
-                ctx.feature_state.current_action_type = Some(action_type);
-
+            HomeMessage::RunFullPipeline => {
                 ctx.feature_state.watch_status_buffer = ctx.watch_status.clone();
                 *ctx.watch_status = false;
-
                 ctx.feature_state.is_loading = true;
-                Arc::make_mut(&mut ctx.feature_state.root_registry).clear();
-
                 ctx.feature_state.downloaded_count = 0;
+
+                Arc::make_mut(&mut ctx.feature_state.root_registry).clear();
 
                 let mut queue = VecDeque::new();
                 queue.push_back(PipelineStage::IndexFull);
@@ -196,10 +195,10 @@ impl HomeMessage {
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
             HomeMessage::IndexingProgress { path, node, is_downloaded } => {
-                if is_downloaded {
-                    ctx.journal.log(Action::Downloaded(path.clone()), ActionType::Automatic);
-                }
                 Arc::make_mut(&mut ctx.feature_state.root_registry).insert(path, node);
+                if is_downloaded {
+                    ctx.feature_state.downloaded_count += 1;
+                }
             }
             HomeMessage::IndexingComplete { indexed_date, downloaded_count } => {
                 ctx.feature_state.indexed_date = indexed_date;
@@ -208,18 +207,16 @@ impl HomeMessage {
             }
             HomeMessage::SortingProgress(move_pair) => {
                 let (source, destination) = move_pair.clone();
-                let action_type =
-                    ctx.feature_state.current_action_type.clone().unwrap_or(ActionType::Automatic);
 
                 apply_moves(
                     Arc::make_mut(&mut ctx.feature_state.root_registry),
                     &[move_pair.clone()],
                 );
-                ctx.feature_state.sorted.push(move_pair);
-                ctx.journal.log(Action::Moved { source, destination }, action_type);
+                ctx.feature_state.moved.push(move_pair);
+                ctx.journal.log(Action::Moved { source, destination }, ActionType::Automatic);
             }
             HomeMessage::SortingComplete => {
-                let moves = &ctx.feature_state.sorted;
+                let moves = &ctx.feature_state.moved;
                 if !moves.is_empty()
                     && let Some((old_path, new_path)) = moves.last()
                 {
@@ -232,8 +229,6 @@ impl HomeMessage {
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
             HomeMessage::PurgeProgress(removed) => {
-                let action_type =
-                    ctx.feature_state.current_action_type.clone().unwrap_or(ActionType::Automatic);
                 let registry_mut = Arc::make_mut(&mut ctx.feature_state.root_registry);
                 registry_mut.shift_remove(&removed);
                 if let Some(parent) = removed.parent() {
@@ -241,7 +236,7 @@ impl HomeMessage {
                         parent_node.children.retain(|c| c != &removed);
                     }
                 }
-                ctx.journal.log(Action::Removed(removed), action_type);
+                ctx.journal.log(Action::Removed(removed), ActionType::Automatic);
             }
             HomeMessage::PurgeComplete => {
                 return Task::done(HomeMessage::AdvancePipeline.into());
@@ -258,13 +253,35 @@ impl HomeMessage {
                     }
                 }
             }
+            HomeMessage::WatcherEvent(event) => match event {
+                WatcherEvent::Removed(paths) => {
+                    return Task::done(
+                        HomeMessage::RemovePaths { paths, action_type: ActionType::Manual }.into(),
+                    );
+                }
+                WatcherEvent::Created(paths) => {
+                    paths.iter().filter(|(_, is_dwnld)| *is_dwnld).for_each(|(p, _)| {
+                        ctx.journal.log(Action::Downloaded(p.clone()), ActionType::Manual);
+                    });
+                    return Task::done(HomeMessage::RunPartialPipeline(paths).into());
+                }
+                WatcherEvent::Renamed(paths) => {
+                    apply_moves(Arc::make_mut(&mut ctx.feature_state.root_registry), &paths);
+                    paths.iter().for_each(|(from, to)| {
+                        ctx.journal.log(
+                            Action::Renamed { source: from.clone(), destination: to.clone() },
+                            ActionType::Manual,
+                        );
+                    });
+                }
+            },
 
             // Controls
             HomeMessage::ChangeRoot(new_root) => {
                 if let Some(dir) = new_root {
                     *ctx.root_directory = dir;
                 }
-                return Task::done(HomeMessage::RunFullPipeline(ActionType::Automatic).into());
+                return Task::done(HomeMessage::RunFullPipeline.into());
             }
             HomeMessage::ToggleWatch => {
                 *ctx.watch_status = !*ctx.watch_status;
@@ -571,6 +588,8 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
 
         let mut pending_downloads: HashSet<PathBuf> = HashSet::new();
         let mut completed_downloads: HashSet<PathBuf> = HashSet::new();
+        let mut reserved_names: HashSet<PathBuf> = HashSet::new();
+        let mut pending_rename_from: Vec<PathBuf> = Vec::new();
 
         // Main thread receives events from the notify channel and sends them to the stream.
         // If the channel is empty, the async executor will suspend the task until an event arrives.
@@ -579,7 +598,6 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
             let msg = match event.kind {
                 EventKind::Create(CreateKind::Any) => {
                     // Catch temp file creation events and filter them out processing only real file creations
-                    tracing::debug!("CreateAny: {:#?}", &event.paths);
                     let (temp, real): (Vec<_>, Vec<_>) = event.paths.into_iter().partition(|p| {
                         DOWNLOAD_TEMP_EXTENSIONS
                             .iter()
@@ -587,58 +605,78 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
                     });
                     pending_downloads.extend(temp);
 
-                    // Only pipeline real files that already have content
-                    let non_empty: Vec<_> = real
+                    let (empty, non_empty): (Vec<_>, Vec<_>) = real
                         .into_iter()
-                        .filter(|p| std::fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false))
-                        .collect();
+                        .partition(|p| std::fs::metadata(p).map(|m| m.len() == 0).unwrap_or(true));
+
+                    // Zero-byte real files are Chrome-style placeholders — remember the name
+                    reserved_names.extend(empty);
 
                     if !non_empty.is_empty() {
-                        Some(HomeMessage::RunPartialPipeline(
+                        Some(HomeMessage::WatcherEvent(WatcherEvent::Created(
                             non_empty.into_iter().map(|p| (p, false)).collect(),
-                        ))
+                        )))
                     } else {
                         None
                     }
                 }
                 EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    // Filter out temp file renames and process remaining paths (regular renames)
                     let (completed, real): (Vec<_>, Vec<_>) =
                         event.paths.into_iter().partition(|p| pending_downloads.remove(p));
                     completed_downloads.extend(completed);
-                    if !real.is_empty() {
-                        let payload = real.into_iter().map(|p| (p, false)).collect::<Vec<_>>();
-                        Some(HomeMessage::RunPartialPipeline(payload))
-                    } else {
-                        None
-                    }
+                    pending_rename_from.extend(real);
+                    None
                 }
                 EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                    // Construct the final payload checking each path against completed downloads
-                    let payload = event
-                        .paths
-                        .into_iter()
-                        .map(|p| {
-                            // Pop one graduated entry per destination path.
-                            // The From/To pair guarantees 1:1 correspondence.
-                            let is_download = completed_downloads
-                                .iter()
-                                .next()
-                                .cloned()
-                                .map(|key| {
-                                    completed_downloads.remove(&key);
-                                    true
-                                })
-                                .unwrap_or(false);
-                            (p, is_download)
-                        })
-                        .collect::<Vec<_>>();
-                    Some(HomeMessage::RunPartialPipeline(payload))
+                    let mut created = Vec::new();
+                    let mut renamed = Vec::new();
+
+                    for to in event.paths {
+                        let is_download = completed_downloads
+                            .iter()
+                            .next()
+                            .cloned()
+                            .map(|key| {
+                                completed_downloads.remove(&key);
+                                true
+                            })
+                            .unwrap_or(false);
+
+                        // A download temp graduated -> it's a confirmed download, goes into created
+                        if is_download {
+                            created.push((to, true));
+                        // There's a pending from waiting -> it's a rename pair, goes into renamed
+                        } else if let Some(from) = pending_rename_from.drain(..1).next() {
+                            renamed.push((from, to));
+                        // Neither -> file moved in from outside the watched dir, goes into created as unconfirmed
+                        } else {
+                            created.push((to, false));
+                        }
+                    }
+
+                    if !created.is_empty() {
+                        let _ = tx
+                            .send(HomeMessage::WatcherEvent(WatcherEvent::Created(created)).into())
+                            .await;
+                    }
+                    if !renamed.is_empty() {
+                        let _ = tx
+                            .send(HomeMessage::WatcherEvent(WatcherEvent::Renamed(renamed)).into())
+                            .await;
+                    }
+                    None
                 }
-                EventKind::Remove(_) => Some(HomeMessage::RemovePaths {
-                    paths: event.paths,
-                    action_type: ActionType::Manual,
-                }),
+                EventKind::Remove(_) => {
+                    let (_, real): (Vec<_>, Vec<_>) =
+                        event.paths.into_iter().partition(|p| reserved_names.remove(p));
+                    // reserved paths are silently dropped — Chrome placeholder cleanup
+                    if !real.is_empty() {
+                        let _ = tx
+                            .send(HomeMessage::WatcherEvent(WatcherEvent::Removed(real)).into())
+                            .await;
+                    }
+                    None
+                }
                 _ => None,
             };
 

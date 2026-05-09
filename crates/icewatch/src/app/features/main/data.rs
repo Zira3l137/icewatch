@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub const DOWNLOAD_TEMP_EXTENSIONS: &[&str] = &[
+pub(crate) const DOWNLOAD_TEMP_EXTENSIONS: &[&str] = &[
     "part",       // Firefox
     "crdownload", // Chrome
     "download",   // Safari / misc
@@ -51,4 +51,11 @@ pub(crate) enum JournalEntrySection {
     Today,
     Yesterday,
     All,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum WatcherEvent {
+    Created(Vec<(PathBuf, bool)>),
+    Removed(Vec<PathBuf>),
+    Renamed(Vec<(PathBuf, PathBuf)>),
 }

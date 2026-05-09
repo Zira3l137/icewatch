@@ -10,18 +10,10 @@ pub(crate) enum ActionType {
     Manual,
 }
 
-impl std::fmt::Display for ActionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ActionType::Automatic => write!(f, "Automatic"),
-            ActionType::Manual => write!(f, "Manual"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub(crate) enum Action {
     Moved { source: PathBuf, destination: PathBuf },
+    Renamed { source: PathBuf, destination: PathBuf },
     Downloaded(PathBuf),
     Removed(PathBuf),
 }
@@ -67,6 +59,9 @@ impl Journal {
             .into_iter()
             .filter(|e| match &e.action {
                 Action::Moved { source, destination } => {
+                    predicate(&source) || predicate(&destination)
+                }
+                Action::Renamed { source, destination } => {
                     predicate(&source) || predicate(&destination)
                 }
                 Action::Removed(path) => predicate(&path),
