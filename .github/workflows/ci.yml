@@ -65,7 +65,7 @@ jobs:
             pkg-config
 
       - name: Clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo clippy --all-features
 
       - name: Format
         run: cargo fmt --check

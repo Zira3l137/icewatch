@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 fn main() {
     #[cfg(target_os = "windows")]
     {
