@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
+    tags: ["v*"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -75,16 +76,13 @@ jobs:
         with:
           merge-multiple: true
 
-      - name: Create or update nightly release
+      - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly
-          name: "Nightly (latest main)"
-          body: |
-            Automated build from the latest commit on `main`.
-
-            **Commit:** ${{ github.sha }}
-          prerelease: true
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'nightly' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Nightly (latest main)' }}
+          body: ${{ startsWith(github.ref, 'refs/tags/') && format('Release {0}', github.ref_name) || format('Automated build from commit {0}', github.sha) }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           files: |
             icewatch
             icewatch.exe
