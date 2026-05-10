@@ -34,6 +34,7 @@ jobs:
           sudo apt-get install -y \
             libwayland-dev \
             libxkbcommon-dev \
+            libx11-dev \
             pkg-config
 
       - name: Build
@@ -60,6 +61,7 @@ jobs:
           sudo apt-get install -y \
             libwayland-dev \
             libxkbcommon-dev \
+            libx11-dev \
             pkg-config
 
       - name: Clippy
