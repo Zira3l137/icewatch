@@ -1,0 +1,5 @@
+sign-tag = false           # don't GPG-sign tags
+publish = false            # don't push to crates.io (icewatch is an app, not a library)
+push = true                # push commits and tags to origin
+pre-release-commit-message = "chore: release {{version}}"
+tag-message = "{{version}}"
