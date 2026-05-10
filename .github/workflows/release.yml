@@ -51,9 +51,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Stage artifact
-        run: |
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }} \
-             ${{ env.BINARY_NAME }}_${{ matrix.target }}${{ matrix.ext }}
+        run: cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }} ${{ env.BINARY_NAME }}_${{ matrix.target }}${{ matrix.ext }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
