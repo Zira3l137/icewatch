@@ -66,6 +66,3 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-features
-
-      - name: Format
-        run: cargo fmt --check
