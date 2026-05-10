@@ -1,4 +1,13 @@
-# icewatch
+![banner](resources/images/banner.png)
+
+
+![Rust](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)
+[![iced](https://img.shields.io/badge/0.14-blue?logo=iced)](https://github.com/iced-rs/iced)
+![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
+![GitHub License](https://img.shields.io/github/license/Zira3l137/icewatch)
+![Release](https://img.shields.io/github/v/release/Zira3l137/icewatch)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Zira3l137/icewatch/ci.yml?branch=main&event=push)
 
 **icewatch** watches a directory — your Downloads folder, Desktop, or anywhere files pile up — and automatically sorts them into subfolders as they arrive. Set your rules once, forget about it.
 
