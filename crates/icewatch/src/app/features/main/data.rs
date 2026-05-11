@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 
 pub(crate) const DOWNLOAD_TEMP_EXTENSIONS: &[&str] = &[
-    "part",       // Firefox
     "crdownload", // Chrome
-    "download",   // Safari / misc
-    "opdownload", // Opera
+    "part",       // Firefox
     "tmp",
 ];
 

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -577,8 +578,6 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
     stream::channel(100, |mut tx: futures::channel::mpsc::Sender<GlobalMessage>| async move {
         let (notify_tx, notify_rx) = smol::channel::unbounded();
 
-        // Watcher runs in a separate thread, once the thread receives an event,
-        // it blocks until the event is sent to the notify channel.
         let mut watcher = recommended_watcher(move |event| {
             let _ = smol::block_on(notify_tx.send(event));
         })
@@ -586,73 +585,85 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
 
         watcher.watch(&root, RecursiveMode::Recursive).expect("failed to watch directory");
 
+        // Temp paths currently being written to by a browser.
+        // Removed on RenameFrom (download finished) or Remove (cancelled).
         let mut pending_downloads: HashSet<PathBuf> = HashSet::new();
-        let mut completed_downloads: HashSet<PathBuf> = HashSet::new();
+
+        // Graduated temp paths awaiting their final RenameTo.
+        // FIFO: the OS always delivers From -> To pairs in causal order,
+        // so positional matching should be correct.
+        let mut completed_downloads: VecDeque<PathBuf> = VecDeque::new();
+
+        // Zero-byte placeholder paths (Chrome-style pre-allocation).
+        // Silently dropped on Remove.
         let mut reserved_names: HashSet<PathBuf> = HashSet::new();
+
+        // RenameFrom paths awaiting a matching RenameTo.
+        // Flushed as Removed at the top of the next event if still unmatched
+        // (meaning the file was moved out of the watched directory).
         let mut pending_rename_from: Vec<PathBuf> = Vec::new();
 
-        // Main thread receives events from the notify channel and sends them to the stream.
-        // If the channel is empty, the async executor will suspend the task until an event arrives.
-        // If it receives an event, it sends it to the stream.
         while let Ok(Ok(event)) = notify_rx.recv().await {
-            let msg = match event.kind {
+            // Flush unmatched RenameFroms from the *previous* event.
+            // By the time any new event arrives, a From with no To is
+            // definitively a move-out, not a split From/To pair.
+            if !pending_rename_from.is_empty() {
+                let moved_out = std::mem::take(&mut pending_rename_from);
+                let _ = tx
+                    .send(HomeMessage::WatcherEvent(WatcherEvent::Removed(moved_out)).into())
+                    .await;
+            }
+
+            match event.kind {
+                // ── Create ───────────────────────────────────────────────────
                 EventKind::Create(CreateKind::Any) => {
-                    // Catch temp file creation events and filter them out processing only real file creations
-                    let (temp, real): (Vec<_>, Vec<_>) = event.paths.into_iter().partition(|p| {
-                        DOWNLOAD_TEMP_EXTENSIONS
-                            .iter()
-                            .any(|ext| p.extension().map_or(false, |e| e == *ext))
-                    });
-                    pending_downloads.extend(temp);
+                    let mut created = Vec::new();
 
-                    let (empty, non_empty): (Vec<_>, Vec<_>) = real
-                        .into_iter()
-                        .partition(|p| std::fs::metadata(p).map(|m| m.len() == 0).unwrap_or(true));
+                    for path in event.paths {
+                        if is_download_temp(&path) {
+                            pending_downloads.insert(path);
+                            continue;
+                        }
 
-                    // Zero-byte real files are Chrome-style placeholders — remember the name
-                    reserved_names.extend(empty);
+                        let is_empty =
+                            std::fs::metadata(&path).map(|m| m.len() == 0).unwrap_or(true);
 
-                    if !non_empty.is_empty() {
-                        Some(HomeMessage::WatcherEvent(WatcherEvent::Created(
-                            non_empty.into_iter().map(|p| (p, false)).collect(),
-                        )))
-                    } else {
-                        None
+                        if is_empty {
+                            // Chrome-style zero-byte placeholder; track and skip.
+                            reserved_names.insert(path);
+                            continue;
+                        }
+
+                        created.push((path, false));
+                    }
+
+                    if !created.is_empty() {
+                        let _ = tx
+                            .send(HomeMessage::WatcherEvent(WatcherEvent::Created(created)).into())
+                            .await;
                     }
                 }
+
+                // ── Rename/From ──────────────────────────────────────────────
                 EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    let (completed, real): (Vec<_>, Vec<_>) =
-                        event.paths.into_iter().partition(|p| pending_downloads.remove(p));
-                    completed_downloads.extend(completed);
-                    pending_rename_from.extend(real);
-                    None
-                }
-                EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                    let mut created = Vec::new();
-                    let mut renamed = Vec::new();
-
-                    for to in event.paths {
-                        let is_download = completed_downloads
-                            .iter()
-                            .next()
-                            .cloned()
-                            .map(|key| {
-                                completed_downloads.remove(&key);
-                                true
-                            })
-                            .unwrap_or(false);
-
-                        // A download temp graduated -> it's a confirmed download, goes into created
-                        if is_download {
-                            created.push((to, true));
-                        // There's a pending from waiting -> it's a rename pair, goes into renamed
-                        } else if let Some(from) = pending_rename_from.drain(..1).next() {
-                            renamed.push((from, to));
-                        // Neither -> file moved in from outside the watched dir, goes into created as unconfirmed
+                    for path in event.paths {
+                        if pending_downloads.remove(&path) {
+                            // Download temp graduated; await the matching To.
+                            completed_downloads.push_back(path);
                         } else {
-                            created.push((to, false));
+                            // Real file; await the matching To.
+                            pending_rename_from.push(path);
                         }
                     }
+                }
+
+                // ── Rename/To ────────────────────────────────────────────────
+                EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                    let (created, renamed) = process_rename_to(
+                        event.paths,
+                        &mut completed_downloads,
+                        &mut pending_rename_from,
+                    );
 
                     if !created.is_empty() {
                         let _ = tx
@@ -664,27 +675,114 @@ pub(crate) fn watch_directory_stream(root: PathBuf) -> impl futures::Stream<Item
                             .send(HomeMessage::WatcherEvent(WatcherEvent::Renamed(renamed)).into())
                             .await;
                     }
-                    None
                 }
+
+                // ── Rename/Both (Linux inotify) ──────────────────────────────
+                // Carries [from, to] in a single event. Mirror what separate
+                // From + To events would do, applying the full download heuristic.
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+                    if let [from, to] = event.paths.as_slice() {
+                        // Simulate the From half:
+                        if pending_downloads.remove(from) {
+                            completed_downloads.push_back(from.clone());
+                        } else {
+                            pending_rename_from.push(from.clone());
+                        }
+
+                        // Simulate the To half:
+                        let (created, renamed) = process_rename_to(
+                            vec![to.clone()],
+                            &mut completed_downloads,
+                            &mut pending_rename_from,
+                        );
+
+                        if !created.is_empty() {
+                            let _ = tx
+                                .send(
+                                    HomeMessage::WatcherEvent(WatcherEvent::Created(created))
+                                        .into(),
+                                )
+                                .await;
+                        }
+                        if !renamed.is_empty() {
+                            let _ = tx
+                                .send(
+                                    HomeMessage::WatcherEvent(WatcherEvent::Renamed(renamed))
+                                        .into(),
+                                )
+                                .await;
+                        }
+                    }
+                }
+
+                // ── Remove ───────────────────────────────────────────────────
                 EventKind::Remove(_) => {
-                    let (_, real): (Vec<_>, Vec<_>) =
-                        event.paths.into_iter().partition(|p| reserved_names.remove(p));
-                    // reserved paths are silently dropped — Chrome placeholder cleanup
-                    if !real.is_empty() {
+                    let mut removed = Vec::new();
+
+                    for path in event.paths {
+                        if reserved_names.remove(&path) {
+                            // Chrome placeholder cleanup — silent.
+                            continue;
+                        }
+                        if pending_downloads.remove(&path) {
+                            // Cancelled in-flight download — clean up, no event.
+                            continue;
+                        }
+                        removed.push(path);
+                    }
+
+                    if !removed.is_empty() {
                         let _ = tx
-                            .send(HomeMessage::WatcherEvent(WatcherEvent::Removed(real)).into())
+                            .send(HomeMessage::WatcherEvent(WatcherEvent::Removed(removed)).into())
                             .await;
                     }
-                    None
                 }
-                _ => None,
-            };
 
-            if let Some(msg) = msg {
-                let _ = tx.send(msg.into()).await;
+                // ── Modify/Write, Modify/Metadata, etc. — ignored ───────────
+                _ => {}
             }
         }
     })
+}
+
+/// Classifies each RenameTo path as either a completed download (Created),
+/// a rename pair (Renamed), or a move-in from outside (Created unconfirmed).
+///
+/// Uses positional FIFO matching for downloads — correct because the OS
+/// always delivers From -> To pairs in causal order.
+fn process_rename_to(
+    to_paths: Vec<PathBuf>,
+    completed_downloads: &mut VecDeque<PathBuf>,
+    pending_rename_from: &mut Vec<PathBuf>,
+) -> (Vec<(PathBuf, bool)>, Vec<(PathBuf, PathBuf)>) {
+    let mut created = Vec::new();
+    let mut renamed = Vec::new();
+
+    for to in to_paths {
+        if completed_downloads.pop_front().is_some() {
+            // A graduated download temp was waiting — this is its final name.
+            created.push((to, true));
+        } else if let Some(from) = pending_rename_from.drain(..1).next() {
+            // A real file rename pair.
+            renamed.push((from, to));
+        } else {
+            // No pending From of any kind — file moved in from outside.
+            created.push((to, false));
+        }
+    }
+
+    (created, renamed)
+}
+
+/// Returns true if this path looks like a browser download temp file.
+/// Covers all known schemes:
+///   .crdownload  — Chromium family (Chrome, Brave, Edge, Opera, Vivaldi)
+///                  both "filename.ext.crdownload" and "Unconfirmed NNNNNN.crdownload"
+///   .part        — Firefox ("filename.ext.part")
+///   .tmp         — Chromium on Windows (UUID.tmp initial phase)
+///                  also used by some download managers
+fn is_download_temp(path: &Path) -> bool {
+    DOWNLOAD_TEMP_EXTENSIONS.iter().any(|ext| path.extension().is_some_and(|e| e == *ext))
 }
 
 fn sort_directory(
