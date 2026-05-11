@@ -1,6 +1,7 @@
 mod features;
 mod message;
 mod state;
+mod tray;
 
 use std::collections::HashMap;
 
@@ -24,6 +25,11 @@ use state::PersistentState;
 use state::Window;
 use state::initialize_features;
 use state::route_feature_update;
+use tray_icon::Icon as TrayIconImage;
+use tray_icon::TrayIcon;
+use tray_icon::TrayIconBuilder;
+use tray_icon::menu::Menu;
+use tray_icon::menu::MenuItem;
 
 use crate::app::features::main;
 use crate::app::message::InputEvent;
@@ -35,6 +41,8 @@ pub(crate) struct App {
     app_state: AppState,
     persistent_state: PersistentState,
     features_state: FeaturesState,
+    tray_icon: Option<TrayIcon>,
+    tray_menu_ids: Vec<String>,
 }
 
 impl Persistent for App {
@@ -58,6 +66,35 @@ impl App {
 
         let mut app = Self { app_state, persistent_state, ..Default::default() };
         initialize_features(&mut app);
+
+        let current_locale = app
+            .app_state
+            .locales
+            .get(&app.persistent_state.current_locale)
+            .expect("Failed to get current locale");
+
+        let tray_menu = Menu::new();
+        let quit_item = MenuItem::new(current_locale.get_string("tray", "quit"), true, None);
+        app.tray_menu_ids.push(quit_item.id().0.clone());
+
+        if let Err(e) = tray_menu.append(&quit_item) {
+            tracing::warn!("Failed to append quit menu item: {}", e);
+        };
+
+        let mut tray = TrayIconBuilder::new()
+            .with_menu_on_left_click(false)
+            .with_menu(Box::new(tray_menu))
+            .with_tooltip(env!("WORKSPACE_NAME"));
+
+        if let Some(icon) = icon.cloned() {
+            let (raw, size) = icon.into_raw();
+            let tray_icon = TrayIconImage::from_rgba(raw, size.width, size.height);
+            if let Ok(tray_icon) = tray_icon {
+                tray = tray.with_icon(tray_icon);
+            }
+        }
+        app.tray_icon = tray.build().ok();
+
         (
             app,
             Task::done(Message::App(AppMessage::View(Window::Main)))
@@ -119,19 +156,20 @@ impl App {
                 }
 
                 AppMessage::Hide(target_id) => {
-                    let Some(main_id) = self.app_state.main_window_id else {
-                        return Task::none();
-                    };
-
                     if self.app_state.windows.remove(&target_id).is_none() {
                         return Task::none();
                     }
 
-                    if self.app_state.windows.is_empty() || target_id == main_id {
-                        Task::done(Message::System(SystemMessage::Exit))
-                    } else {
-                        window::close(target_id)
-                    }
+                    // let Some(main_id) = self.app_state.main_window_id else {
+                    //     return Task::none();
+                    // };
+
+                    // if self.app_state.windows.is_empty() || target_id == main_id {
+                    //     Task::done(Message::System(SystemMessage::Exit))
+                    // } else {
+                    //     window::close(target_id)
+                    // }
+                    window::close(target_id)
                 }
 
                 AppMessage::Input(window_id, input) => {
@@ -186,6 +224,12 @@ impl App {
             Subscription::none()
         };
 
+        let tray_subscription = Subscription::<Message>::run(tray::tray_stream);
+        let tray_menu_subscription =
+            Subscription::<Message>::run_with(self.tray_menu_ids.clone(), |ids| {
+                tray::tray_menu_stream(ids.clone())
+            });
+
         Subscription::batch([
             event::listen_with(|event, _, window_id| match event {
                 event::Event::Mouse(mouse_event) => {
@@ -200,6 +244,8 @@ impl App {
             frame_subscription,
             window::close_requests().map(|id| Message::App(AppMessage::Hide(id))),
             watch_subscription,
+            tray_subscription,
+            tray_menu_subscription,
         ])
     }
 }

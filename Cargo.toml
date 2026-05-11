@@ -47,3 +47,4 @@ indexmap = { version = "2.14.0", default-features = false, features = [
     "std",
     "serde",
 ] }
+tray-icon = "0.24.0"

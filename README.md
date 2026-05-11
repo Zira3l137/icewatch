@@ -88,7 +88,7 @@ It will appear in the theme selector on next launch alongside the 22 built-in th
 ## Roadmap
 
 - [ ] More criteria for more granular sorting rules.
-- [ ] System tray icon and notifications.
+- [x] System tray icon and notifications.
 
 ## Built with
 
