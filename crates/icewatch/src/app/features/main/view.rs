@@ -47,11 +47,11 @@ impl MainView {
         let palette = theme.extended_palette();
         match self {
             MainView::Home => {
-                let toolbar = toolbar::toolbar(&locale, ctx.clone());
-                let dashboard = dashboard::dashboard(ctx.clone(), &locale, &theme);
-                let explorer = explorer::explorer(ctx.clone(), &locale, &theme);
+                let toolbar = toolbar::toolbar(locale, ctx.clone());
+                let dashboard = dashboard::dashboard(ctx.clone(), locale, theme);
+                let explorer = explorer::explorer(ctx.clone(), locale, theme);
                 let context_menu = if ctx.feature_state.context_menu_visible {
-                    context_menu::context_menu(ctx.clone(), &locale)
+                    context_menu::context_menu(ctx.clone(), locale)
                 } else {
                     space().into()
                 };

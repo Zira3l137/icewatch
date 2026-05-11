@@ -67,7 +67,7 @@ pub(crate) fn explorer<'a>(
 
     let mut nodes = Vec::with_capacity(ctx.feature_state.root_registry.len() + 1);
 
-    create_nodes(&mut nodes, &root_node, 0, ctx.clone(), &palette, locale);
+    create_nodes(&mut nodes, &root_node, 0, ctx.clone(), palette, locale);
     let node_col = nodes.into_iter().fold(column![], |acc, node| acc.push(node));
 
     scrollable(
@@ -106,11 +106,7 @@ pub(crate) fn create_nodes<'a>(
 
     children.iter().for_each(|p| {
         let Some(node) = registry.get(*p) else { return };
-        let focused = if ctx.feature_state.focused_node.as_deref() == Some(node.path.as_path()) {
-            true
-        } else {
-            false
-        };
+        let focused = ctx.feature_state.focused_node.as_deref() == Some(node.path.as_path());
         acc.push(node_widget(node, depth, focused, palette, locale));
         if node.is_dir && node.expanded {
             create_nodes(acc, node, depth + 1, ctx.clone(), palette, locale);
@@ -240,7 +236,7 @@ fn node_tooltip<'a>(
         format!("{} ({:.4} MB)", node_size_bytes, node_size_mb)
     };
     let date_val = (!node.unidentified).then(|| node.created.format("%d-%m-%Y %H:%M").to_string());
-    let size_val = (!node.unidentified).then(|| size_str);
+    let size_val = (!node.unidentified).then_some(size_str);
 
     container(column([
         rich_text([Span::<()>::new(local("file_date")), value_span(date_val)]).into(),

@@ -35,15 +35,17 @@ pub(crate) fn rules_panel<'a>(
     palette: &'a Extended,
 ) -> Element<'a, GlobalMessage> {
     let no_rules = ctx.sorting_rules.is_empty();
-    no_rules.then_some(space().into()).unwrap_or(
+    if no_rules {
+        space().into()
+    } else {
         container(list_box(ctx.clone(), locale, palette))
             .height(Length::Shrink)
             .width(Length::Fill)
             .align_y(Vertical::Top)
             .padding(CONTAINER_PADDING)
             .style(container::bordered_box)
-            .into(),
-    )
+            .into()
+    }
 }
 
 pub(crate) fn control_panel<'a>(
@@ -153,12 +155,12 @@ fn list_box<'a>(
         .enumerate()
         .map(|(rule_idx, rule)| {
             let focused = ctx.feature_state.focused_rule == Some(rule_idx);
-            let bg = focused.then_some(palette.primary.base.color).unwrap_or(Color::TRANSPARENT);
-            let interaction = ctx
-                .feature_state
-                .rule_mode
-                .then_some(mouse::Interaction::NotAllowed)
-                .unwrap_or(mouse::Interaction::Pointer);
+            let bg = if focused { palette.primary.base.color } else { Color::TRANSPARENT };
+            let interaction = if ctx.feature_state.rule_mode {
+                mouse::Interaction::NotAllowed
+            } else {
+                mouse::Interaction::Pointer
+            };
             let rule_idx = (!ctx.feature_state.rule_mode).then_some(rule_idx);
 
             mouse_area(
@@ -184,9 +186,9 @@ fn rule_text<'a>(
 ) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
     let primary_color =
-        focused.then_some(palette.primary.base.text).unwrap_or(palette.primary.base.color);
+        if focused { palette.primary.base.text } else { palette.primary.base.color };
     let secondary_color =
-        focused.then_some(palette.success.base.text).unwrap_or(palette.success.base.color);
+        if focused { palette.success.base.text } else { palette.success.base.color };
     rich_text(match &rule.criterion {
         CriterionKind::ByExtension(crit) => vec![
             Span::<()>::new(format!("{}: ", local("extension"))),

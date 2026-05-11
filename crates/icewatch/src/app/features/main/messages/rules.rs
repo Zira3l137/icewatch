@@ -79,7 +79,7 @@ impl RulesMessage {
                 let rule = match &fs.active_criterion {
                     Criterion::ByExtension => Rule::new(
                         ByExtension::new(fs.extension_input.clone().unwrap_or_default()),
-                        &fs.destination_input.clone().unwrap_or_default(),
+                        fs.destination_input.clone().unwrap_or_default(),
                     ),
                     Criterion::ByName => Rule::new(
                         ByName {
@@ -87,7 +87,7 @@ impl RulesMessage {
                             ends_with: fs.ends_with_input.clone(),
                             contains: fs.contains_input.clone(),
                         },
-                        &fs.destination_input.clone().unwrap_or_default(),
+                        fs.destination_input.clone().unwrap_or_default(),
                     ),
                 }
                 .context("failed to create rule")

@@ -27,7 +27,7 @@ pub(crate) fn dashboard<'a>(
     theme: &'a Theme,
 ) -> Element<'a, GlobalMessage> {
     let local = |key: &str| locale.get_string("main", key);
-    let last_redraw = ctx.last_redraw.clone();
+    let last_redraw = *ctx.last_redraw;
     let progress = last_redraw.as_millis() / PROGRESS_INTERVAL_MS % PROGRESS_FRAME_COUNT as u128;
     let palette = theme.extended_palette();
     let last_sorted: (String, String) = ctx

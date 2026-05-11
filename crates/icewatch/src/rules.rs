@@ -166,8 +166,8 @@ impl Criterion for ByName {
         let Some(name) = path.file_stem().and_then(|n| n.to_str()) else {
             return false;
         };
-        self.starts_with.as_deref().map_or(true, |s| name.starts_with(s))
-            && self.ends_with.as_deref().map_or(true, |s| name.ends_with(s))
-            && self.contains.as_deref().map_or(true, |s| name.contains(s))
+        self.starts_with.as_deref().is_none_or(|s| name.starts_with(s))
+            && self.ends_with.as_deref().is_none_or(|s| name.ends_with(s))
+            && self.contains.as_deref().is_none_or(|s| name.contains(s))
     }
 }

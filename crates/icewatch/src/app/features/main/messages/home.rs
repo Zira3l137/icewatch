@@ -75,6 +75,7 @@ pub(crate) enum HomeMessage {
     RemovePaths { paths: Vec<PathBuf>, action_type: ActionType },
 
     /// Represents a request to capture a mouse button press.
+    #[expect(dead_code)]
     CaptureMouseBtn(mouse::Button),
 
     /// Represents a request to capture the mouse position.
@@ -157,7 +158,7 @@ impl HomeMessage {
                 }
             },
             HomeMessage::RunPartialPipeline(paths) => {
-                ctx.feature_state.watch_status_buffer = ctx.watch_status.clone();
+                ctx.feature_state.watch_status_buffer = *ctx.watch_status;
                 *ctx.watch_status = false;
                 ctx.feature_state.is_loading = true;
 
@@ -174,7 +175,7 @@ impl HomeMessage {
                 return Task::done(HomeMessage::AdvancePipeline.into());
             }
             HomeMessage::RunFullPipeline => {
-                ctx.feature_state.watch_status_buffer = ctx.watch_status.clone();
+                ctx.feature_state.watch_status_buffer = *ctx.watch_status;
                 *ctx.watch_status = false;
                 ctx.feature_state.is_loading = true;
                 ctx.feature_state.downloaded_count = 0;
@@ -211,7 +212,7 @@ impl HomeMessage {
 
                 apply_moves(
                     Arc::make_mut(&mut ctx.feature_state.root_registry),
-                    &[move_pair.clone()],
+                    std::slice::from_ref(&move_pair),
                 );
                 ctx.feature_state.moved.push(move_pair);
                 ctx.journal.log(Action::Moved { source, destination }, ActionType::Automatic);
@@ -221,8 +222,8 @@ impl HomeMessage {
                 if !moves.is_empty()
                     && let Some((old_path, new_path)) = moves.last()
                 {
-                    let old_path = old_path.strip_prefix(&ctx.root_directory).unwrap_or(&old_path);
-                    let new_path = new_path.strip_prefix(&ctx.root_directory).unwrap_or(&new_path);
+                    let old_path = old_path.strip_prefix(&ctx.root_directory).unwrap_or(old_path);
+                    let new_path = new_path.strip_prefix(ctx.root_directory).unwrap_or(new_path);
                     ctx.feature_state.last_sorted_file =
                         Some((old_path.to_path_buf(), new_path.to_path_buf()));
                 }
@@ -232,10 +233,10 @@ impl HomeMessage {
             HomeMessage::PurgeProgress(removed) => {
                 let registry_mut = Arc::make_mut(&mut ctx.feature_state.root_registry);
                 registry_mut.shift_remove(&removed);
-                if let Some(parent) = removed.parent() {
-                    if let Some(parent_node) = registry_mut.get_mut(parent) {
-                        parent_node.children.retain(|c| c != &removed);
-                    }
+                if let Some(parent) = removed.parent()
+                    && let Some(parent_node) = registry_mut.get_mut(parent)
+                {
+                    parent_node.children.retain(|c| c != &removed);
                 }
                 ctx.journal.log(Action::Removed(removed), ActionType::Automatic);
             }
@@ -247,10 +248,10 @@ impl HomeMessage {
                 for path in &paths {
                     ctx.journal.log(Action::Removed(path.clone()), action_type.clone());
                     registry_mut.shift_remove(path);
-                    if let Some(parent) = path.parent() {
-                        if let Some(parent_node) = registry_mut.get_mut(parent) {
-                            parent_node.children.retain(|c| c != path);
-                        }
+                    if let Some(parent) = path.parent()
+                        && let Some(parent_node) = registry_mut.get_mut(parent)
+                    {
+                        parent_node.children.retain(|c| c != path);
                     }
                 }
             }
@@ -304,7 +305,7 @@ impl HomeMessage {
                         let matches = path
                             .file_name()
                             .and_then(|s| s.to_str())
-                            .map_or(false, |name| name.to_ascii_lowercase().contains(&term));
+                            .is_some_and(|name| name.to_ascii_lowercase().contains(&term));
 
                         if !matches {
                             continue;
@@ -348,7 +349,7 @@ impl HomeMessage {
                 ctx.feature_state.current_view = MainView::Journal;
             }
             HomeMessage::OpenNode => {
-                let cmd = cfg!(target_os = "windows").then(|| "explorer").unwrap_or_else(|| "open");
+                let cmd = cfg!(target_os = "windows").then(|| "explorer").unwrap_or("open");
                 if let Some(node) = ctx.feature_state.focused_node.clone() {
                     return Task::done(GlobalMessage::System(SystemMessage::Execute(
                         Command::new(cmd).arg(node.to_string_lossy().into_owned()),
@@ -401,16 +402,14 @@ impl HomeMessage {
             }
 
             // Input Handling
-            HomeMessage::CaptureMouseBtn(btn) => match btn {
-                _ => {
-                    let ctx_menu_just_opened = ctx.feature_state.context_menu_just_opened;
-                    if ctx_menu_just_opened {
-                        ctx.feature_state.context_menu_just_opened = false;
-                    } else {
-                        ctx.feature_state.context_menu_visible = false;
-                    }
+            HomeMessage::CaptureMouseBtn(_) => {
+                let ctx_menu_just_opened = ctx.feature_state.context_menu_just_opened;
+                if ctx_menu_just_opened {
+                    ctx.feature_state.context_menu_just_opened = false;
+                } else {
+                    ctx.feature_state.context_menu_visible = false;
                 }
-            },
+            }
             HomeMessage::CaptureMousePosition(pos) => {
                 ctx.feature_state.mouse_position = pos;
             }
@@ -451,13 +450,11 @@ fn index_paths_stream(
             }
 
             let mut children = vec![];
-            if is_directory {
-                if let Ok(mut entries) = smol::fs::read_dir(&path).await {
-                    while let Some(Ok(entry)) = entries.next().await {
-                        children.push(entry.path());
-                    }
-                    stack.extend(children.iter().cloned().map(|p| (p, is_downloaded)));
+            if is_directory && let Ok(mut entries) = smol::fs::read_dir(&path).await {
+                while let Some(Ok(entry)) = entries.next().await {
+                    children.push(entry.path());
                 }
+                stack.extend(children.iter().cloned().map(|p| (p, is_downloaded)));
             }
 
             if path != root {
@@ -504,13 +501,11 @@ fn index_directory_stream(root: PathBuf) -> impl futures::Stream<Item = GlobalMe
             }
 
             let mut children = vec![];
-            if is_directory {
-                if let Ok(mut entries) = smol::fs::read_dir(&path).await {
-                    while let Some(Ok(entry)) = entries.next().await {
-                        children.push(entry.path());
-                    }
-                    stack.extend(children.iter().cloned());
+            if is_directory && let Ok(mut entries) = smol::fs::read_dir(&path).await {
+                while let Some(Ok(entry)) = entries.next().await {
+                    children.push(entry.path());
                 }
+                stack.extend(children.iter().cloned());
             }
 
             if path != root {
@@ -544,10 +539,10 @@ fn apply_moves(registry: &mut IndexMap<PathBuf, ExplorerNode>, moves: &[(PathBuf
         }
 
         // Remove from old parent's children list
-        if let Some(old_parent) = old_path.parent() {
-            if let Some(parent_node) = registry.get_mut(old_parent) {
-                parent_node.children.retain(|c| c != old_path);
-            }
+        if let Some(old_parent) = old_path.parent()
+            && let Some(parent_node) = registry.get_mut(old_parent)
+        {
+            parent_node.children.retain(|c| c != old_path);
         }
 
         // Add to new parent's children list, inserting the parent node if missing
@@ -565,10 +560,10 @@ fn apply_moves(registry: &mut IndexMap<PathBuf, ExplorerNode>, moves: &[(PathBuf
                         size_bytes: 0,
                     },
                 );
-            } else if let Some(parent_node) = registry.get_mut(new_parent) {
-                if !parent_node.children.contains(new_path) {
-                    parent_node.children.push(new_path.clone());
-                }
+            } else if let Some(parent_node) = registry.get_mut(new_parent)
+                && !parent_node.children.contains(new_path)
+            {
+                parent_node.children.push(new_path.clone());
             }
         }
     }
@@ -794,9 +789,8 @@ fn sort_directory(
     stream::channel(100, move |mut tx: futures::channel::mpsc::Sender<GlobalMessage>| async move {
         let mut visited = IndexMap::with_capacity(registry.len());
         let mut new_paths = HashSet::with_capacity(registry.len());
-        let mut it = registry.iter();
 
-        while let Some((_, node)) = it.next() {
+        for (_, node) in registry.iter() {
             let mut moved: Option<(PathBuf, PathBuf)> = None;
             for rule in &rules {
                 if rule.applies_to(&node.path)

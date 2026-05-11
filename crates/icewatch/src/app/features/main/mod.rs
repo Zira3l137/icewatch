@@ -170,7 +170,7 @@ pub(crate) fn view<'a>(ctx: Context<'a>, _window_id: window::Id) -> Element<'a, 
 
     let locale = ctx.locales.get(current_locale).expect("locale not found");
 
-    ctx.feature_state.current_view.view(ctx.clone(), &locale, &theme)
+    ctx.feature_state.current_view.view(ctx.clone(), locale, theme)
 }
 
 pub(crate) fn input(input: &InputEvent) -> Task<GlobalMessage> {

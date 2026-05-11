@@ -68,7 +68,7 @@ pub(crate) fn journal_entry_section<'a>(
                 .iter()
                 .rev()
                 .fold(column![].padding(COL_PADDING).spacing(COL_SPACING), |col, entry| {
-                    col.push(journal_entry(*entry, locale, palette))
+                    col.push(journal_entry(entry, locale, palette))
                 }),
         )
         .width(Length::Fill)
@@ -88,25 +88,25 @@ fn journal_entry<'a>(
     let (action, action_color, action_text, action_type): (String, Color, String, ActionType) =
         match &entry.action {
             Action::Moved { source, destination } => (
-                format!("{}", local("journal_entry_moved")),
+                local("journal_entry_moved").to_string(),
                 palette.warning.base.color,
                 format!("{} -> {}", short_path(source, 1), short_path(destination, 2),),
                 entry.action_type.clone(),
             ),
             Action::Renamed { source, destination } => (
-                format!("{}", local("journal_entry_renamed")),
+                local("journal_entry_renamed").to_string(),
                 palette.warning.base.color,
                 format!("{} -> {}", short_path(source, 1), short_path(destination, 2),),
                 entry.action_type.clone(),
             ),
             Action::Removed(path) => (
-                format!("{}", local("journal_entry_removed")),
+                local("journal_entry_removed").to_string(),
                 palette.danger.base.color,
                 format!("{}", path.display()),
                 entry.action_type.clone(),
             ),
             Action::Downloaded(path) => (
-                format!("{}", local("journal_entry_downloaded")),
+                local("journal_entry_downloaded").to_string(),
                 palette.success.base.color,
                 format!("{}", path.display()),
                 entry.action_type.clone(),

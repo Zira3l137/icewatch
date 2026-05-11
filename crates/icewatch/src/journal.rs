@@ -59,13 +59,13 @@ impl Journal {
             .into_iter()
             .filter(|e| match &e.action {
                 Action::Moved { source, destination } => {
-                    predicate(&source) || predicate(&destination)
+                    predicate(source) || predicate(destination)
                 }
                 Action::Renamed { source, destination } => {
-                    predicate(&source) || predicate(&destination)
+                    predicate(source) || predicate(destination)
                 }
-                Action::Removed(path) => predicate(&path),
-                Action::Downloaded(path) => predicate(&path),
+                Action::Removed(path) => predicate(path),
+                Action::Downloaded(path) => predicate(path),
             })
             .collect()
     }
