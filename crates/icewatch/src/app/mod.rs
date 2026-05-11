@@ -67,33 +67,21 @@ impl App {
         let mut app = Self { app_state, persistent_state, ..Default::default() };
         initialize_features(&mut app);
 
-        let current_locale = app
-            .app_state
-            .locales
-            .get(&app.persistent_state.current_locale)
-            .expect("Failed to get current locale");
-
-        let tray_menu = Menu::new();
-        let quit_item = MenuItem::new(current_locale.get_string("tray", "quit"), true, None);
-        app.tray_menu_ids.push(quit_item.id().0.clone());
-
-        if let Err(e) = tray_menu.append(&quit_item) {
-            tracing::warn!("Failed to append quit menu item: {}", e);
-        };
-
-        let mut tray = TrayIconBuilder::new()
-            .with_menu_on_left_click(false)
-            .with_menu(Box::new(tray_menu))
-            .with_tooltip(env!("WORKSPACE_NAME"));
-
-        if let Some(icon) = icon.cloned() {
-            let (raw, size) = icon.into_raw();
-            let tray_icon = TrayIconImage::from_rgba(raw, size.width, size.height);
-            if let Ok(tray_icon) = tray_icon {
-                tray = tray.with_icon(tray_icon);
-            }
+        #[cfg(target_os = "linux")]
+        {
+            use std::sync::mpsc::channel;
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                gtk::init().expect("Failed to initialize GTK");
+                let ids = create_tray_icon();
+                tx.send(ids).unwrap();
+                gtk::main();
+            });
+            app.tray_menu_ids = rx.recv().unwrap();
         }
-        app.tray_icon = tray.build().ok();
+
+        #[cfg(not(target_os = "linux"))]
+        create_tray_icon(&mut app);
 
         (
             app,
@@ -248,4 +236,54 @@ impl App {
             tray_menu_subscription,
         ])
     }
+}
+
+#[cfg(target_os = "linux")]
+fn create_tray_icon() -> Vec<String> {
+    let tray_menu = Menu::new();
+    let quit_item = MenuItem::new("Quit", true, None);
+
+    if let Err(e) = tray_menu.append(&quit_item) {
+        tracing::warn!("Failed to append quit menu item: {}", e);
+    };
+
+    let tray = TrayIconBuilder::new()
+        .with_menu_on_left_click(false)
+        .with_menu(Box::new(tray_menu))
+        .with_tooltip(env!("WORKSPACE_NAME"));
+    tray.build().expect("Failed to build tray icon");
+
+    vec![quit_item.id().0.clone()]
+}
+
+#[cfg(not(target_os = "linux"))]
+fn create_tray_icon(app: &mut App) {
+    let current_locale = app
+        .app_state
+        .locales
+        .get(&app.persistent_state.current_locale)
+        .expect("Failed to get current locale");
+
+    let tray_menu = Menu::new();
+    let quit_item = MenuItem::new(current_locale.get_string("tray", "quit"), true, None);
+    app.tray_menu_ids.push(quit_item.id().0.clone());
+
+    if let Err(e) = tray_menu.append(&quit_item) {
+        tracing::warn!("Failed to append quit menu item: {}", e);
+    };
+
+    let mut tray = TrayIconBuilder::new()
+        .with_menu_on_left_click(false)
+        .with_menu(Box::new(tray_menu))
+        .with_tooltip(env!("WORKSPACE_NAME"));
+
+    if let Some(icon) = icon.cloned() {
+        let (raw, size) = icon.into_raw();
+        let tray_icon = TrayIconImage::from_rgba(raw, size.width, size.height);
+        if let Ok(tray_icon) = tray_icon {
+            tray = tray.with_icon(tray_icon);
+        }
+    }
+
+    app.tray_icon = tray.build().ok();
 }

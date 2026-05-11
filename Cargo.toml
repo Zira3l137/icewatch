@@ -48,3 +48,4 @@ indexmap = { version = "2.14.0", default-features = false, features = [
     "serde",
 ] }
 tray-icon = "0.24.0"
+gtk = "0.18.2"
