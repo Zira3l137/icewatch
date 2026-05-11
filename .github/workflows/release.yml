@@ -45,6 +45,7 @@ jobs:
             libwayland-dev \
             libxkbcommon-dev \
             libx11-dev \
+            libglib2.0-dev \
             pkg-config
 
       - name: Build release binary
