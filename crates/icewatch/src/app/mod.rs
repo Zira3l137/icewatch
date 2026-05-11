@@ -81,7 +81,7 @@ impl App {
         }
 
         #[cfg(not(target_os = "linux"))]
-        create_tray_icon(&mut app);
+        create_tray_icon(&mut app, icon.clone());
 
         (
             app,
@@ -257,7 +257,7 @@ fn create_tray_icon() -> Vec<String> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn create_tray_icon(app: &mut App) {
+fn create_tray_icon(app: &mut App, icon: Option<&window::Icon>) {
     let current_locale = app
         .app_state
         .locales

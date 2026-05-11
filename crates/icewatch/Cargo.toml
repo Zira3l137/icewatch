@@ -20,7 +20,6 @@ anyhow.workspace = true
 smol.workspace = true
 tray-icon.workspace = true
 
-gtk.workspace = true
 iced.workspace = true
 serde.workspace = true
 chrono.workspace = true
@@ -28,3 +27,6 @@ rfd.workspace = true
 dirs.workspace = true
 indexmap.workspace = true
 notify.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { workspace = true }
