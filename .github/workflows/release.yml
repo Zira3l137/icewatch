@@ -46,6 +46,7 @@ jobs:
             libxkbcommon-dev \
             libx11-dev \
             libglib2.0-dev \
+            libgtk-3-dev \
             pkg-config
 
       - name: Build release binary
