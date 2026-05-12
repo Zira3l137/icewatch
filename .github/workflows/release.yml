@@ -2,12 +2,18 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches:
+      - main
+
+    tags:
+      - "v*"
 
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: icewatch
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -16,24 +22,32 @@ jobs:
 
     strategy:
       fail-fast: false
+
       matrix:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ext: .exe
+            archive_ext: zip
 
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             ext: ""
+            archive_ext: tar.gz
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+          components: |
+            llvm-tools-preview
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
@@ -41,6 +55,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             libwayland-dev \
             libxkbcommon-dev \
@@ -51,43 +66,140 @@ jobs:
             libayatana-appindicator3-dev \
             pkg-config
 
+      - name: Verify tag version matches Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          grep -q "version = \"$VERSION\"" Cargo.toml
+
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Stage artifact
-        run: cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }} ${{ env.BINARY_NAME }}_${{ matrix.target }}${{ matrix.ext }}
+      - name: Strip Linux binary
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          strip \
+            target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
 
-      - name: Upload artifact
+      - name: Strip Windows binary
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          llvm-strip \
+            target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe
+
+      - name: Determine archive name
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="nightly"
+          fi
+
+          ARCHIVE_NAME="${{ env.BINARY_NAME }}-${VERSION}-${{ matrix.target }}"
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Create release staging directory
+        shell: bash
+        run: |
+          mkdir -p "$ARCHIVE_NAME"
+
+          cp \
+            "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }}" \
+            "$ARCHIVE_NAME/"
+
+          cp app_config.toml "$ARCHIVE_NAME/"
+
+          cp README.md "$ARCHIVE_NAME/"
+
+          cp LICENSE* "$ARCHIVE_NAME/" || true
+
+          cp -r resources "$ARCHIVE_NAME/"
+          cp -r themes "$ARCHIVE_NAME/"
+
+      - name: Create ZIP archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          7z a "$ARCHIVE_NAME.zip" "$ARCHIVE_NAME"
+
+          certutil -hashfile "$ARCHIVE_NAME.zip" SHA256 \
+            > "$ARCHIVE_NAME.zip.sha256"
+
+          echo "ASSET=$ARCHIVE_NAME.zip" >> $GITHUB_ENV
+          echo "CHECKSUM=$ARCHIVE_NAME.zip.sha256" >> $GITHUB_ENV
+
+      - name: Create TAR.GZ archive (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          tar czf "$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
+
+          sha256sum "$ARCHIVE_NAME.tar.gz" \
+            > "$ARCHIVE_NAME.tar.gz.sha256"
+
+          echo "ASSET=$ARCHIVE_NAME.tar.gz" >> $GITHUB_ENV
+          echo "CHECKSUM=$ARCHIVE_NAME.tar.gz.sha256" >> $GITHUB_ENV
+
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BINARY_NAME }}_${{ matrix.target }}${{ matrix.ext }}
-          path: ${{ env.BINARY_NAME }}_${{ matrix.target }}${{ matrix.ext }}
+          name: ${{ env.ARCHIVE_NAME }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.CHECKSUM }}
 
   publish:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           merge-multiple: true
 
-      - name: Create or update release
+      #
+      # Remove existing nightly assets/releases before upload.
+      #
+      - name: Delete existing nightly release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release delete nightly \
+            --cleanup-tag \
+            --yes \
+            || true
+
+      - name: Recreate nightly tag
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          git tag nightly
+          git push --force origin nightly
+
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'nightly' }}
 
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Nightly (latest main)' }}
 
-          body: ${{ startsWith(github.ref, 'refs/tags/') && format('Release {0}', github.ref_name) || format('Automated build from commit {0}', github.sha) }}
+          body: |
+            ${{ startsWith(github.ref, 'refs/tags/') && format('Release {0}', github.ref_name) || format('Automated nightly build from commit {0}', github.sha) }}
 
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
           files: |
-            icewatch_x86_64-pc-windows-msvc.exe
-            icewatch_x86_64-unknown-linux-gnu
+            *.zip
+            *.tar.gz
+            *.sha256
