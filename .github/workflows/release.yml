@@ -161,14 +161,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           merge-multiple: true
 
-      #
-      # Remove existing nightly assets/releases before upload.
-      #
+      - name: Configure git
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Delete existing nightly release
         if: github.ref == 'refs/heads/main'
         env:
@@ -184,7 +191,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          git tag nightly
+          git tag -f nightly
           git push --force origin nightly
 
       - name: Publish release
