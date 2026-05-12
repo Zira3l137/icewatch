@@ -168,7 +168,10 @@ pub(crate) fn view<'a>(ctx: Context<'a>, _window_id: window::Id) -> Element<'a, 
         .get(current_theme)
         .unwrap_or_else(|| ctx.themes.get(DEFAULT_THEME).unwrap_or(&iced::Theme::Dark));
 
-    let locale = ctx.locales.get(current_locale).expect("locale not found");
+    let locale = ctx
+        .locales
+        .get(current_locale)
+        .unwrap_or_else(|| ctx.locales.get("en_US").expect("locale not found"));
 
     ctx.feature_state.current_view.view(ctx.clone(), locale, theme)
 }

@@ -262,7 +262,7 @@ fn create_tray_icon(app: &mut App, icon: Option<&window::Icon>) {
         .app_state
         .locales
         .get(&app.persistent_state.current_locale)
-        .expect("Failed to get current locale");
+        .unwrap_or_else(|| app.app_state.locales.get("en_US").expect("locale not found"));
 
     let tray_menu = Menu::new();
     let quit_item = MenuItem::new(current_locale.get_string("tray", "quit"), true, None);

@@ -142,7 +142,10 @@ pub(crate) fn view<'a>(ctx: Context<'a>, _window_id: Id) -> Element<'a, GlobalMe
         .unwrap_or_else(|| ctx.themes.get(DEFAULT_THEME).unwrap_or(&iced::Theme::Dark));
     let palette = theme.extended_palette();
 
-    let locale = ctx.locales.get(current_locale).expect("locale not found");
+    let locale = ctx
+        .locales
+        .get(current_locale)
+        .unwrap_or_else(|| ctx.locales.get("en_US").expect("locale not found"));
     let local = |key: &str| locale.get_string("settings", key);
 
     let locale_icon = text(local("locale_icon"))
